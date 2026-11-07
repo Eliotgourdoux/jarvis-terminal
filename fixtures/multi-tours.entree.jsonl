@@ -1,0 +1,7 @@
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Retiens le mot de passe fictif : CITRON. Réponds juste 'noté'."}]}, "parent_tool_use_id": null}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Quel mot t'ai-je demandé de retenir ? Un mot."}]}, "parent_tool_use_id": null}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Lance la commande Bash `sleep 6 && echo lent-fini` puis dis 'premier fini'."}]}, "parent_tool_use_id": null}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Message envoyé pendant le travail : après ça, dis aussi 'deuxième reçu'."}]}, "parent_tool_use_id": null}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Lance la commande Bash `sleep 30 && echo jamais` puis dis 'trop tard'."}]}, "parent_tool_use_id": null}
+{"type": "control_request", "request_id": "bt-1-d0450d", "request": {"subtype": "interrupt"}}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Après l'interruption, réponds juste 'toujours là'."}]}, "parent_tool_use_id": null}

@@ -1,0 +1,1 @@
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Réponds juste 'ok'."}]}, "parent_tool_use_id": null}

@@ -1,0 +1,2 @@
+Fichier de test du bac à sable.
+Ligne 2 : pomme, poire.
