@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<title>Jarvis</title>
+<link rel="stylesheet" href="css/jarvis.css">
+</head>
+<body>
+<!-- Panneau central du mode vocal (fenêtre flottante de la coque, qui ne vole pas le focus).
+     Swift → panneau : jarvis.maj({actif, etat, niveau, enLigne, file}) ; panneau → Swift : passer, rejouer, couper, modeVocal. -->
+<main id="panneau" class="panneau etat-inactif">
+  <header class="pj-tete">
+    <span class="pj-titre">Jarvis</span>
+    <span class="pj-espace"></span>
+    <button type="button" id="pj-mode" class="pj-mode" aria-pressed="false" title="Activer ou couper le mode Jarvis"><span class="pj-inter" aria-hidden="true"><i></i></span><span id="pj-mode-libelle">Coupé</span></button>
+  </header>
+
+  <section class="pj-micro">
+    <div class="pj-micro-ligne">
+      <span id="pj-pastille" class="pj-pastille" aria-hidden="true"></span>
+      <div class="pj-micro-textes">
+        <div id="pj-etat" class="pj-etat" aria-live="polite">Mode Jarvis coupé</div>
+        <div id="pj-aide" class="pj-aide">Rien ne parle, rien n’écoute.</div>
+      </div>
+    </div>
+    <div id="pj-jauge" class="pj-jauge" aria-hidden="true"></div>
+  </section>
+
+  <section id="pj-enligne" class="pj-enligne vide">
+    <div id="pj-enligne-titre" class="pj-libelle">En ce moment</div>
+    <div class="pj-enligne-projet"><span id="pj-enligne-emoji" class="pj-emoji"></span><span id="pj-enligne-nom" class="pj-nom"></span></div>
+    <div id="pj-enligne-texte" class="pj-enligne-texte"></div>
+  </section>
+
+  <section class="pj-file">
+    <div class="pj-file-tete"><span class="pj-libelle">À suivre</span><span id="pj-file-compte" class="pj-compte">0</span></div>
+    <ol id="pj-file-liste" class="pj-file-liste"></ol>
+  </section>
+
+  <footer class="pj-actions">
+    <button type="button" id="pj-passer" class="pj-bouton" title="Passer au message suivant"><span class="pj-bouton-icone" data-icone="passer"></span>Passer</button>
+    <button type="button" id="pj-rejouer" class="pj-bouton" title="Redire le dernier message"><span class="pj-bouton-icone" data-icone="rejouer"></span>Rejouer</button>
+    <button type="button" id="pj-couper" class="pj-bouton" title="Couper la voix tout de suite"><span class="pj-bouton-icone" data-icone="couper"></span>Couper</button>
+  </footer>
+</main>
+
+<script src="js/commun.js"></script>
+<script src="js/faux-jarvis.js"></script>
+<script src="js/jarvis.js"></script>
+</body>
+</html>
