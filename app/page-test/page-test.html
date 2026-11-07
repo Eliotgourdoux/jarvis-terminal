@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Better Terminal — page de test du pont</title>
+<link rel="stylesheet" href="page-test.css">
+</head>
+<body>
+<header>
+  <div id="titre">Page de test du pont</div>
+  <div id="details">en attente de bt.info…</div>
+</header>
+<nav>
+  <button id="b-attend">État : attend</button>
+  <button id="b-relancer">Relancer (haiku)</button>
+  <button id="b-terminal">Ouvrir dans le terminal</button>
+  <button id="b-copier">Copier l'id</button>
+  <button id="b-lien">Lien https</button>
+  <button id="b-question">Question test</button>
+  <button id="b-fermer">Fermer</button>
+  <button id="b-vocal">Mode vocal</button>
+  <button id="b-qvocale">Question vocale</button>
+  <span id="vocal-etat"></span>
+</nav>
+<main id="journal"></main>
+<footer>
+  <input id="saisie" placeholder="Message pour Claude, Entrée pour envoyer" autocomplete="off">
+  <span id="compteur">0 ligne</span>
+</footer>
+<script src="page-test.js"></script>
+</body>
+</html>
