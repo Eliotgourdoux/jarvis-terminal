@@ -1,0 +1,21 @@
+/* Better Terminal For Claude — coloration du code (highlight.js), palette néon adoucie.
+ * Couleurs claires sur fond sombre : contraste suffisant pour une lecture longue. */
+.hljs { color: #E9E9F2; }
+.hljs-comment, .hljs-quote { color: rgba(255,255,255,.48); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-doctag, .hljs-meta .hljs-keyword { color: #CDA8FF; }
+.hljs-built_in, .hljs-type, .hljs-class .hljs-title, .hljs-title.class_ { color: #FFA6E6; }
+.hljs-title, .hljs-title.function_, .hljs-section { color: #86ECFF; }
+.hljs-string, .hljs-meta .hljs-string, .hljs-template-tag { color: #9DF2C9; }
+.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: #FFCB7E; }
+.hljs-variable, .hljs-template-variable, .hljs-params { color: #F1E3C8; }
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id { color: #86ECFF; }
+.hljs-name, .hljs-selector-pseudo { color: #FFA6E6; }
+.hljs-tag { color: rgba(255,255,255,.62); }
+.hljs-regexp, .hljs-link { color: #FF9AA4; }
+.hljs-meta { color: #A9B4FF; }
+.hljs-subst { color: #E9E9F2; }
+.hljs-operator, .hljs-punctuation { color: rgba(255,255,255,.72); }
+.hljs-addition { color: #D2FBE6; background: rgba(75,240,160,.13); }
+.hljs-deletion { color: #FFD4D8; background: rgba(255,90,106,.14); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
