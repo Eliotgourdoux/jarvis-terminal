@@ -1,0 +1,22 @@
+:root { color-scheme: dark; --cyan: #5BE4FF; --violet: #A77BFF; --vert: #4BF0A0; --ambre: #FFB648; --rouge: #FF9AA4; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; color: #fff; overflow: hidden;
+  font: 12.5px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-user-select: none; }
+body { display: flex; flex-direction: column; gap: 7px; padding: 20px 16px 12px; }
+#haut { display: flex; align-items: center; gap: 8px; font: 600 14px ui-rounded, "SF Pro Rounded", sans-serif; }
+#pastille { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.35); }
+body[data-etat="pret"] #pastille { background: var(--vert); }
+body[data-etat="ecoute"] #pastille { background: var(--rouge); }
+body[data-etat="transcription"] #pastille { background: var(--ambre); }
+body[data-etat="parle"] #pastille { background: var(--cyan); }
+#raccourci { margin-left: auto; font: 500 11px ui-rounded, sans-serif; color: rgba(255,255,255,.6); }
+#niveau { height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden; }
+#barre { height: 100%; width: 0; background: var(--cyan); transition: width .07s linear; }
+#enligne { min-height: 18px; color: var(--cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#file { flex: 1; margin: 0; padding-left: 18px; overflow: hidden; color: rgba(255,255,255,.8); }
+#file li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#note { color: rgba(255,255,255,.55); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#boutons { display: flex; gap: 6px; }
+button { font: 500 11.5px ui-rounded, sans-serif; color: #fff; background: rgba(255,255,255,.10);
+  border: 1px solid rgba(91,228,255,.45); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+button:hover { background: rgba(91,228,255,.18); }
