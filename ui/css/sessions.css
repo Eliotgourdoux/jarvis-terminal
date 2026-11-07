@@ -1,0 +1,120 @@
+/* Jarvis Terminal — barre latérale des sessions. Opaque, mêmes jetons que app.css. Aucune animation en boucle. */
+
+:root {
+  --fond: #111216;
+  --surface: #18191F;
+  --surface-2: #1F2129;
+  --surface-3: #282B35;
+  --bord: #2A2C36;
+  --bord-fort: #3A3D4A;
+  --texte: #ECECF1;
+  --dim: #B3B6C2;
+  --faint: #868A99;
+  --accent: #9D84FF;
+  --accent-fond: #241F3D;
+  --ambre: #F2B252;
+  --ambre-fond: #2A2216;
+  --vert: #57D69A;
+  --police: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --titre-h: 28px;
+  color-scheme: dark;
+}
+
+html, body { margin: 0; height: 100%; background: var(--surface); }
+body {
+  color: var(--texte); font: 13px/1.4 var(--police);
+  -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+  display: flex; flex-direction: column; overflow: hidden; cursor: default;
+}
+
+.faux-feux { display: none; }
+html.dev .faux-feux { display: flex; position: fixed; top: 8px; left: 13px; gap: 8px; }
+html.dev .faux-feux i { width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; }
+html.dev .faux-feux i:nth-child(2) { background: #FEBC2E; }
+html.dev .faux-feux i:nth-child(3) { background: #28C840; }
+
+.tete {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  margin-top: var(--titre-h); padding: 8px 10px 8px 16px;
+}
+.tete-titre { flex: 1; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.nouvelle {
+  width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--bord); border-radius: 7px; background: var(--surface-2); color: var(--dim); cursor: pointer;
+}
+.nouvelle:hover { background: var(--surface-3); color: var(--texte); border-color: var(--bord-fort); }
+.nouvelle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+
+.liste { flex: 1; overflow-y: auto; padding: 2px 8px 8px; display: flex; flex-direction: column; gap: 2px; }
+.liste::-webkit-scrollbar { width: 8px; }
+.liste::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+
+.item {
+  position: relative; display: block; width: 100%; box-sizing: border-box; text-align: left;
+  padding: 8px 10px 9px 12px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.item:hover { background: var(--surface-2); }
+.item.actif { background: var(--surface-3); border-color: var(--bord-fort); }
+.item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Claude attend une réponse : liseré ambre, visible même quand la session n'est pas affichée. */
+.item.attend { background: var(--ambre-fond); border-color: #5A4420; }
+.item.attend.actif { border-color: var(--ambre); }
+.item.attend::before {
+  content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--ambre);
+}
+
+.ligne1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.emoji { flex: none; font-size: 14px; line-height: 1; }
+.projet { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dossier { font-weight: 400; color: var(--faint); }
+.raccourci { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.fermer {
+  flex: none; display: none; width: 20px; height: 20px; padding: 0; margin: -2px -4px -2px 0; place-items: center;
+  border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer;
+}
+.fermer svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+.fermer:hover { background: var(--bord-fort); color: var(--texte); }
+.item:hover .fermer, .item:focus-within .fermer { display: grid; }
+.item:hover .raccourci, .item:focus-within .raccourci { display: none; }
+
+.etat { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--faint); }
+.point { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--bord-fort); }
+.etat .temps { margin-left: auto; font-variant-numeric: tabular-nums; }
+.e-travaille .point { background: var(--accent); }
+.e-travaille .etat-texte { color: var(--accent); }
+.e-attend .point { background: var(--ambre); }
+.e-attend .etat-texte { color: var(--ambre); font-weight: 600; }
+.e-nonlu .point { background: var(--vert); }
+.e-nonlu .etat-texte { color: var(--vert); font-weight: 600; }
+
+.resume {
+  margin-top: 3px; font-size: 12.5px; line-height: 1.4; color: var(--dim);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;
+}
+.item:not(.actif):not(.attend) .resume { color: var(--faint); }
+
+.vide { margin: 24px 16px; font-size: 13px; color: var(--faint); line-height: 1.6; }
+.lien { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.lien:hover { text-decoration: underline; }
+
+.pied { flex: none; padding: 10px 16px 12px; font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--bord); }
+
+/* Fermeture avec bilan en cours (08/11/2026) : la session descend en bas de la liste, estompée, avec un
+   petit spinner rouge, le temps que Claude fasse sa fin de session. Seule animation en boucle de la barre, voulue par Eliot. */
+.item.e-fermeture { opacity: .62; cursor: default; animation: descendre .28s ease-out; }
+.item.e-fermeture:hover { background: transparent; }
+.e-fermeture .etat-texte { color: #F0757E; }
+.spinner {
+  flex: none; width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%;
+  border: 1.6px solid rgba(240, 117, 126, .25); border-top-color: #F0757E;
+  animation: tourner .8s linear infinite;
+}
+@keyframes tourner { to { transform: rotate(360deg); } }
+@keyframes descendre { from { opacity: 0; transform: translateY(-6px); } to { opacity: .62; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } .item.e-fermeture { animation: none; } }
+
+/* Conversation Telegram avec Jarvis (08/11/2026) : épinglée en haut, séparée des sessions par un filet. */
+.canal { flex: none; font-size: 11px; color: var(--faint); }
+.separateur-jarvis { height: 1px; margin: 6px 4px 6px; background: var(--bord); flex: none; }
