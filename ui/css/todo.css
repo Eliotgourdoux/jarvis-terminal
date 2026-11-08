@@ -1,0 +1,140 @@
+/* Better Terminal For Claude — panneau « To-do » à droite (js/todo.js).
+ * Fond plein et sobre, comme le reste de l'app : pas de flou, pas de dégradé, pas de lueur,
+ * aucune animation en boucle. Variables de css/app.css. Préfixe « tp- » (« .todo » sert déjà
+ * au rendu de l'outil TodoWrite dans le fil). */
+
+.bouton-todo .compte[hidden] { display: none; }
+@media (max-width: 1080px) {
+  #bt-todo .libelle { display: none; }
+  #bt-todo .icone-court { display: block; }
+}
+
+.todo-panneau {
+  --tp-largeur: 320px;
+  position: fixed; z-index: 25; right: 0; bottom: 0;
+  top: calc(var(--titre-h) + var(--hauteur-barre));
+  width: var(--tp-largeur); box-sizing: border-box;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--bord-fort);
+  box-shadow: -10px 0 28px rgba(0,0,0,.35);
+  font: 13.5px/1.45 var(--police); color: var(--texte);
+  animation: tp-entree .14s ease-out both;
+}
+@keyframes tp-entree { from { transform: translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* La saisie ne passe pas sous le panneau : le pied se resserre quand ils se chevaucheraient. */
+@media (max-width: 1400px) {
+  body.todo-ouvert .pied { right: 320px; }
+  body.todo-ouvert .recherche { right: 336px; }
+}
+/* Fenêtre étroite : le pied reprend toute la largeur, le panneau s'arrête au-dessus. */
+@media (max-width: 720px) {
+  body.todo-ouvert .pied { right: 0; }
+  .todo-panneau { bottom: var(--hauteur-pied); width: min(var(--tp-largeur), 100vw); border-bottom: 1px solid var(--bord-fort); }
+}
+
+/* ---------- En-tête ---------- */
+.tp-tete {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--bord);
+}
+.tp-titre { flex: none; white-space: nowrap; font: 600 14.5px var(--police-titre); color: #fff; }
+.tp-projet {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; color: var(--faint);
+}
+.tp-espace { flex: 1 1 0; }
+.tp-icone {
+  flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--dim);
+  transition: background-color .12s ease-out, color .12s ease-out;
+}
+.tp-icone:hover { background: var(--surface-3); color: #fff; }
+.tp-icone svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Champ d'ajout ---------- */
+.tp-ajout { flex: none; padding: 12px 12px 4px; }
+.tp-champ {
+  width: 100%; height: 34px; box-sizing: border-box; padding: 0 11px; outline: 0; border-radius: 8px;
+  background: var(--fond); border: 1px solid var(--bord); color: var(--texte); font: 13.5px var(--police);
+  transition: border-color .12s ease-out;
+}
+.tp-champ:focus { border-color: var(--accent); }
+.tp-champ:focus-visible { outline: none; }
+.tp-champ::placeholder { color: var(--faint); }
+.tp-champ:disabled { color: var(--faint); }
+
+/* ---------- Corps ---------- */
+.tp-corps { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 16px; }
+.tp-section { padding: 8px 12px 4px; }
+.tp-section + .tp-section { border-top: 1px solid var(--bord); margin-top: 8px; padding-top: 12px; }
+.tp-section-tete { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 2px 4px 6px; }
+.tp-section-titre { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--faint); }
+.tp-section-compte { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.tp-message { padding: 6px 4px; color: var(--faint); font-size: 13px; }
+.tp-chemin { display: block; margin-top: 6px; font: 11.5px/1.4 var(--police-code); color: var(--faint); word-break: break-all; }
+.tp-erreur {
+  margin: 2px 0 8px; padding: 7px 10px; border-radius: 6px; font-size: 12.5px; line-height: 1.4;
+  color: var(--rouge-texte); background: var(--rouge-fond); border: 1px solid #5C2C31;
+}
+
+/* ---------- Tâches du projet ---------- */
+.tp-liste { list-style: none; margin: 0; padding: 0; }
+.tp-tache {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 6px; border-radius: 6px;
+}
+.tp-tache:hover { background: var(--surface-2); }
+.tp-case {
+  flex: none; position: relative; width: 17px; height: 17px; margin-top: 1px; padding: 0;
+  border-radius: 50%; border: 1.5px solid var(--bord-fort); background: transparent; cursor: pointer;
+  transition: border-color .12s ease-out, background-color .12s ease-out;
+}
+.tp-case::after {
+  content: ""; position: absolute; left: 4.5px; top: 2.5px; width: 3.5px; height: 7px;
+  border-right: 1.6px solid var(--accent); border-bottom: 1.6px solid var(--accent);
+  transform: rotate(45deg); opacity: 0; transition: opacity .12s ease-out;
+}
+.tp-case:hover { border-color: var(--accent); }
+.tp-case:hover::after { opacity: .55; }
+.tp-tache.en-cours .tp-case { border-color: var(--accent); background: var(--accent-fond); cursor: default; }
+.tp-tache.en-cours .tp-case::after { opacity: 1; }
+.tp-tache.en-cours .tp-titre-tache { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--bord-fort); }
+
+.tp-corps-tache { min-width: 0; flex: 1 1 auto; }
+.tp-corps-tache.a-notes { cursor: pointer; }
+.tp-titre-tache { color: var(--texte); overflow-wrap: anywhere; }
+.tp-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; font-size: 11.5px; color: var(--faint); }
+.tp-prio { color: var(--ambre); }
+.tp-echeance.proche { color: var(--ambre); }
+.tp-echeance.retard { color: var(--rouge-texte); }
+.tp-notes {
+  margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--faint); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  white-space: pre-line;
+}
+.tp-notes.deplie { display: block; -webkit-line-clamp: unset; overflow: visible; cursor: text; user-select: text; }
+
+/* ---------- Plan de Claude ---------- */
+.tp-etapes { list-style: none; margin: 0; padding: 0 0 4px; }
+.tp-etape { display: flex; align-items: flex-start; gap: 10px; padding: 4px 6px; font-size: 13px; line-height: 1.4; }
+.tp-marque {
+  flex: none; position: relative; width: 11px; height: 11px; margin: 3px 3px 0;
+  border-radius: 50%; border: 1.5px solid var(--bord-fort); box-sizing: border-box;
+}
+.tp-etape-texte { min-width: 0; color: var(--dim); overflow-wrap: anywhere; }
+.tp-etape.en-cours .tp-marque { border-color: var(--accent); background: var(--accent); }
+.tp-etape.en-cours .tp-etape-texte { color: var(--texte); font-weight: 600; }
+.tp-etape.fait .tp-marque { border: 0; }
+.tp-etape.fait .tp-marque::after {
+  content: ""; position: absolute; left: 3px; top: 0; width: 3.5px; height: 7px;
+  border-right: 1.6px solid var(--vert); border-bottom: 1.6px solid var(--vert); transform: rotate(45deg);
+}
+.tp-etape.fait .tp-etape-texte { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--bord-fort); }
+
+@media (prefers-reduced-motion: reduce) {
+  .todo-panneau { animation: none; }
+}
