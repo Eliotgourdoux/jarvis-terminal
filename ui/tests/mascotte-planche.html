@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Planche des animations de la mascotte</title>
+<link rel="stylesheet" href="../css/app.css"><link rel="stylesheet" href="../css/atelier.css">
+<style>
+  body { overflow: auto; padding: 20px; }
+  .grille { display: grid; grid-template-columns: repeat(5, 170px); gap: 18px 10px; }
+  .cellule { position: relative; height: 140px; border: 1px solid var(--bord); border-radius: 8px; }
+  .cellule .mascotte { position: absolute; inset: 0; width: auto; top: 0; bottom: 6px; }
+  .cellule .m-pile, .cellule .m-liens { display: none; }
+  .legende { position: absolute; top: 4px; right: 6px; font: 11px var(--police-code); color: var(--faint); }
+</style></head>
+<body><div class="grille" id="g"></div>
+<script src="../js/commun.js"></script>
+<script src="../js/vue-outils.js"></script>
+<script src="../js/atelier.js"></script>
+<script>
+  var CAS = [
+    ['etat-touche anim-clavier', 'Lance une commande', 'clavier'],
+    ['etat-touche anim-clavier anim-sablier', 'Attend la fin de la commande', 'sablier'],
+    ['etat-touche anim-lire', 'Lit', 'lire'],
+    ['etat-touche anim-ecrire', 'Écrit', 'ecrire'],
+    ['etat-touche anim-modifier', 'Modifie', 'modifier'],
+    ['etat-touche anim-grep', 'Cherche dans le projet', 'grep'],
+    ['etat-touche anim-glob', 'Cherche dans le projet', 'glob'],
+    ['etat-touche anim-websearch', 'Cherche sur le web', 'websearch'],
+    ['etat-touche anim-loupe', 'Cherche un outil', 'loupe'],
+    ['etat-touche anim-globe', 'Lit une page web', 'globe'],
+    ['etat-touche anim-bebe', 'Confie une tâche à un agent', 'bebe'],
+    ['etat-touche anim-liste', 'Met à jour sa liste', 'liste'],
+    ['etat-touche anim-livre', 'Ouvre un skill', 'livre'],
+    ['etat-touche anim-cle', 'Utilise Gmail', 'cle'],
+    ['etat-reflechit anim-pense', 'Réfléchit…', 'pense'],
+    ['etat-reflechit anim-concentre', 'Se concentre…', 'concentre'],
+    ['etat-reflechit anim-concentre fort', 'Se concentre très fort…', 'concentre fort'],
+    ['etat-travaille anim-parle', 'Écrit sa réponse…', 'parle'],
+    ['etat-attend anim-alerte', 'Attend ta réponse', 'alerte'],
+    ['etat-ecoute anim-ecoute', 'À l’écoute', 'ecoute'],
+    ['etat-ecoute anim-dort', 'En veille', 'dort'],
+    ['etat-travaille anim-tasse', 'Compacte sa mémoire…', 'compaction'],
+    ['etat-touche anim-lire plusieurs', 'Fait 3 choses à la fois', 'plusieurs'],
+    ['etat-touche anim-clavier flash-erreur', 'Lance une commande', 'erreur'],
+    ['etat-ecoute anim-ecoute flash-succes', 'Terminé', 'succes'],
+    ['etat-ecoute anim-ecoute flash-sursaut', 'À l’écoute', 'sursaut'],
+    ['etat-fin anim-dort', 'Session terminée', 'fin']
+  ];
+  var faux = { on: function () {}, items: [], etat: 'pret' };
+  var g = document.getElementById('g');
+  CAS.forEach(function (c) {
+    var m = new BT.Mascotte(faux);
+    m._rendre = function () {};
+    var cel = document.createElement('div'); cel.className = 'cellule';
+    m.el.className = 'mascotte ' + c[0]; m.phrase.textContent = c[1];
+    var l = document.createElement('span'); l.className = 'legende'; l.textContent = c[2];
+    cel.appendChild(m.el); cel.appendChild(l); g.appendChild(cel);
+  });
+  // ?seul=<légende>[&t=0,1,2] : une seule animation, figée à plusieurs instants (0 à 1,9 s par défaut) pour voir son déroulé.
+  var seul = (location.search.match(/seul=([^&]+)/) || [])[1];
+  if (seul) {
+    var cels = [].slice.call(g.children), modele = cels.filter(function (c) { return c.querySelector('.legende').textContent === decodeURIComponent(seul); })[0];
+    g.innerHTML = '';
+    var instants = ((location.search.match(/t=([^&]+)/) || [])[1] || '0,.5,.8,1.1,1.3,1.7,1.9').split(',').map(Number);
+    instants.forEach(function (t) {
+      var c = modele.cloneNode(true); c.querySelector('.legende').textContent = t + ' s';
+      g.appendChild(c);
+      // Chaque animation de la liste garde son propre délai, décalé de t.
+      [].forEach.call(c.querySelectorAll('.mascotte *'), function (n) {
+        var d = getComputedStyle(n).animationDelay.split(',').map(function (x) { return (parseFloat(x) - t) + 's'; }).join(',');
+        n.style.animationPlayState = 'paused'; n.style.animationDelay = d;
+      });
+    });
+  } else if (/fige/.test(location.search)) {
+    var s = document.createElement('style'); s.textContent = '.mascotte *{animation-play-state:paused!important;animation-delay:-1.2s!important}'; document.head.appendChild(s);
+  }
+</script></body></html>
