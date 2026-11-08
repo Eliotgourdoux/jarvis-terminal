@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<title>Jarvis — Telegram</title>
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/code.css">
+<link rel="stylesheet" href="css/telegram.css">
+</head>
+<body class="tg">
+<header class="tg-tete">
+  <span class="tg-emoji" aria-hidden="true">🤖</span>
+  <span class="tg-nom">Jarvis</span>
+  <span class="tg-sous">Telegram · le même fil que sur ton téléphone</span>
+</header>
+
+<main id="defile" class="tg-defile" aria-label="Conversation avec Jarvis">
+  <div class="tg-colonne">
+    <button type="button" id="plus-ancien" class="tg-plus" hidden>Afficher les messages plus anciens</button>
+    <div id="fil" class="tg-fil" aria-live="polite"></div>
+    <div id="attente" class="tg-attente" hidden></div>
+  </div>
+</main>
+
+<button type="button" id="en-bas" class="tg-en-bas" hidden>Revenir en bas</button>
+
+<footer class="tg-pied">
+  <div class="tg-colonne">
+    <div id="statut" class="tg-statut" hidden></div>
+    <div class="tg-saisie">
+      <textarea id="saisie" rows="1" placeholder="Écris à Jarvis…" aria-label="Message à Jarvis"></textarea>
+      <button type="button" id="envoyer" class="tg-envoyer" title="Envoyer (Entrée)" aria-label="Envoyer" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2"/></svg>
+      </button>
+    </div>
+    <div class="tg-aide">Entrée pour envoyer · ⇧Entrée pour aller à la ligne · ton message part aussi dans Telegram, précédé de 💻</div>
+  </div>
+</footer>
+
+<script src="vendor/marked-18.1.1.umd.js"></script>
+<script src="vendor/purify-3.4.17.min.js"></script>
+<script src="vendor/highlight-11.12.0.min.js"></script>
+<script src="js/commun.js"></script>
+<script src="js/markdown.js"></script>
+<script src="js/telegram.js"></script>
+</body>
+</html>

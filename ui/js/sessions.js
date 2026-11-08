@@ -2,7 +2,8 @@
  * Swift → page : window.barreSessions.maj([{id, numero, projet, emoji, etat, resume, dernierMessage,
  *                dansTerminal, maj, actif, nonLu}])
  *                + en bas, les fermetures avec bilan en cours : {id, projet, emoji, fermeture: true, maj}
- * Page → Swift : {type:'pret'} {type:'choisir', id} {type:'fermer', id} {type:'nouvelle'} */
+ *                2e argument : la conversation Telegram avec Jarvis {apercu, maj, actif, nonLu, occupe} ou null
+ * Page → Swift : {type:'pret'} {type:'choisir', id} {type:'fermer', id} {type:'nouvelle'} {type:'jarvis'} */
 (function () {
   'use strict';
 
@@ -12,6 +13,7 @@
   var liste = document.getElementById('liste');
   var vide = document.getElementById('vide');
   var donnees = [];
+  var jarvis = null;
 
   function el(tag, cls, texte) {
     var e = document.createElement(tag);
@@ -57,8 +59,36 @@
     return svg;
   }
 
+  /* Conversation Telegram avec Jarvis : épinglée en haut, au-dessus des sessions. */
+  function rendreJarvis() {
+    var item = el('div', 'item item-jarvis');
+    item.setAttribute('role', 'button');
+    item.tabIndex = 0;
+    if (jarvis.actif) { item.classList.add('actif'); item.setAttribute('aria-current', 'true'); }
+    var l1 = el('div', 'ligne1');
+    l1.appendChild(el('span', 'emoji', '🤖'));
+    l1.appendChild(el('span', 'projet', 'Jarvis'));
+    l1.appendChild(el('span', 'canal', 'Telegram'));
+    item.appendChild(l1);
+    var et = el('div', 'etat');
+    var cle = jarvis.occupe ? 'travaille' : jarvis.nonLu ? 'nonlu' : 'pret';
+    item.classList.add('e-' + cle);
+    et.appendChild(el('span', 'point'));
+    et.appendChild(el('span', 'etat-texte', jarvis.occupe ? 'Jarvis réfléchit…' : jarvis.nonLu ? 'Nouveau message' : 'Conversation'));
+    if (jarvis.maj) { var t = el('span', 'temps', temps(jarvis.maj)); t.dataset.maj = jarvis.maj; et.appendChild(t); }
+    item.appendChild(et);
+    var r = nettoyer(jarvis.apercu);
+    if (r) item.appendChild(el('div', 'resume', r));
+    function ouvrir() { envoyer({ type: 'jarvis' }); }
+    item.addEventListener('click', ouvrir);
+    item.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ouvrir(); } });
+    liste.appendChild(item);
+    liste.appendChild(el('div', 'separateur-jarvis'));
+  }
+
   function rendre() {
     liste.textContent = '';
+    if (jarvis) rendreJarvis();
     vide.hidden = donnees.length > 0;
     var doublons = {};
     donnees.forEach(function (d) { doublons[d.projet] = (doublons[d.projet] || 0) + 1; });
@@ -118,7 +148,7 @@
   }
 
   window.barreSessions = {
-    maj: function (l) { donnees = Array.isArray(l) ? l : []; rendre(); }
+    maj: function (l, j) { donnees = Array.isArray(l) ? l : []; jarvis = j && typeof j === 'object' ? j : null; rendre(); }
   };
 
   // les durées « il y a » se rafraîchissent sans tout redessiner
@@ -145,7 +175,7 @@
       { id: 'd', numero: 4, emoji: '🛰️', projet: 'Cockpit', etat: 'pret', resume: 'Les sessions en attente s’allument en orange.', maj: m - 7200000 },
       { id: 'e', numero: 5, emoji: '🤖', projet: 'Jarvis-Ultron-Telegram', etat: 'pret', dansTerminal: true, resume: '', maj: m - 90000000 },
       { id: 'f', numero: 99, emoji: '🏢', projet: 'QG', fermeture: true, maj: m - 14000 }
-    ]);
+    ], { apercu: 'La session QG est reprise dans Jarvis Terminal, avec sa conversation d’avant.', maj: m - 300000, nonLu: true, occupe: false });
   } else {
     envoyer({ type: 'pret' });
   }

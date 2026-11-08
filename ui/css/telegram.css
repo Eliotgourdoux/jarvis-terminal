@@ -1,0 +1,106 @@
+/* Jarvis Terminal — la conversation Telegram avec Jarvis (08/11/2026).
+ * Mêmes jetons et mêmes bulles que les sessions (app.css). Opaque, sobre, aucune animation en boucle. */
+
+body.tg { display: flex; flex-direction: column; }
+
+.tg-tete {
+  flex: none; display: flex; align-items: baseline; gap: 9px;
+  margin-top: var(--titre-h); padding: 12px 24px 12px;
+  background: var(--surface); border-bottom: 1px solid var(--bord);
+  -webkit-user-select: none; user-select: none; cursor: default;
+}
+.tg-emoji { font-size: 17px; align-self: center; }
+.tg-nom { font: 650 17px var(--police-titre); color: #fff; }
+.tg-sous { font-size: 12.5px; color: var(--faint); }
+
+.tg-defile { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.tg-defile::-webkit-scrollbar { width: 10px; }
+.tg-defile::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid var(--fond); }
+.tg-colonne { max-width: var(--largeur); margin: 0 auto; padding: 0 28px; box-sizing: border-box; }
+.tg-defile .tg-colonne { padding-top: 18px; padding-bottom: 28px; }
+
+.tg-plus {
+  display: block; margin: 0 auto 18px; padding: 6px 14px; border-radius: 8px;
+  border: 1px solid var(--bord); background: var(--surface); color: var(--dim); font: 13px var(--police); cursor: pointer;
+}
+.tg-plus:hover { background: var(--surface-2); color: var(--texte); }
+
+/* Séparateur de jour */
+.tg-jour { display: flex; align-items: center; gap: 12px; margin: 26px 0 10px; font-size: 12px; font-weight: 600; color: var(--faint); }
+.tg-jour::before, .tg-jour::after { content: ""; flex: 1; height: 1px; background: var(--bord); }
+
+/* Messages d'Eliot : la bulle des sessions */
+.tg-eliot { display: flex; flex-direction: column; align-items: flex-end; margin: 18px 0 8px; }
+.tg-eliot .bulle-meta { text-align: right; }
+.tg-eliot.tg-app .bulle { border-color: #4A3F7A; }
+
+/* Messages de Jarvis : texte posé sur la page, comme les réponses de Claude */
+.tg-jarvis { margin: 14px 0 20px; }
+.tg-jarvis .tour-tete { margin-bottom: 6px; }
+.tg-jarvis .tour-nom { color: var(--accent); }
+.tg-etiquette {
+  font-size: 11.5px; font-weight: 600; color: var(--dim); padding: 1px 7px; border-radius: 5px;
+  background: var(--surface-2); border: 1px solid var(--bord);
+}
+.tg-jarvis.tg-auto .md { color: var(--dim); }
+
+/* Lignes de signalement : vocal, fichier, photo, reel, réaction */
+.tg-signal { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--faint); margin: 0 0 6px; }
+.tg-eliot .tg-signal { justify-content: flex-end; margin: 0 4px 6px 0; }
+.tg-signal b { font-weight: 600; color: var(--dim); }
+.tg-fichier {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%; margin: 6px 0; padding: 6px 10px; box-sizing: border-box;
+  border-radius: 8px; border: 1px solid var(--bord); background: var(--surface); color: var(--dim);
+  font: 13px var(--police); text-align: left; cursor: pointer;
+}
+.tg-fichier:hover { background: var(--surface-2); color: var(--texte); }
+.tg-fichier span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-fichier small { color: var(--faint); font-size: 12px; }
+.tg-segment-vocal { border-left: 2px solid var(--bord-fort); padding-left: 12px; }
+
+/* Citation du message auquel on répond */
+.tg-citation {
+  max-width: min(85%, 620px); margin: 0 0 5px; padding: 4px 10px; box-sizing: border-box;
+  border-left: 2px solid var(--bord-fort); font-size: 12.5px; color: var(--faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tg-jarvis .tg-citation { max-width: 100%; }
+
+/* Petits événements : reel partagé, réaction */
+.tg-evenement { margin: 10px 0; text-align: right; font-size: 12.5px; color: var(--faint); }
+.tg-evenement a, .tg-lien { color: var(--lien); }
+
+/* En attente d'envoi (déposé, pas encore pris par le routeur) */
+.tg-eliot.tg-en-cours .bulle { opacity: .7; }
+.tg-eliot.tg-echec .bulle { border-color: var(--rouge); }
+.tg-attente .tg-signal { margin-top: 4px; }
+
+/* Pied : statut + saisie */
+.tg-pied { flex: none; padding: 10px 0 14px; background: var(--fond); border-top: 1px solid var(--bord); }
+.tg-statut { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; font-size: 12.5px; color: var(--accent); }
+.tg-statut.alerte { color: var(--ambre); }
+.tg-statut .tg-point { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.tg-saisie {
+  display: flex; align-items: flex-end; gap: 10px; padding: 10px 10px 10px 16px;
+  border: 1px solid var(--bord-fort); border-radius: 14px; background: var(--surface);
+}
+.tg-saisie:focus-within { border-color: var(--accent); }
+.tg-saisie textarea {
+  flex: 1; min-height: 24px; max-height: 260px; resize: none; padding: 2px 0; margin: 0;
+  border: 0; outline: 0; background: transparent; color: var(--texte); font: 15.5px/1.55 var(--police);
+}
+.tg-saisie textarea::placeholder { color: var(--faint); }
+.tg-envoyer {
+  flex: none; width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 9px; background: var(--accent-plein); color: #fff; cursor: pointer;
+}
+.tg-envoyer:disabled { background: var(--surface-3); color: var(--faint); cursor: default; }
+.tg-envoyer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.tg-aide { margin: 6px 4px 0; font-size: 11.5px; color: var(--faint); }
+
+.tg-en-bas {
+  position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 5;
+  padding: 6px 14px; border-radius: 16px; border: 1px solid var(--bord-fort);
+  background: var(--surface-2); color: var(--texte); font: 13px var(--police); cursor: pointer;
+}
+.tg-en-bas:hover { background: var(--surface-3); }

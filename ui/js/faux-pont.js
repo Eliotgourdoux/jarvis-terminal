@@ -115,7 +115,9 @@
       window.bt.info({
         cwd: (init && init.cwd) || '/Users/eliotgourdoux/Desktop/Projets/Demo',
         projet: P.get('projet') || 'Better Terminal For Claude', emoji: P.get('emoji') || '🖥️',
-        sessionId: (init && init.session_id) || 'demo', modele: P.get('modele') || 'sonnet', effort: P.get('effort') || 'high'
+        sessionId: (init && init.session_id) || 'demo', modele: P.get('modele') || 'sonnet',
+        // effort=defaut : aucun effort choisi, le menu montre « Par défaut (…) » (effortDefaut, Moyen si absent).
+        effort: P.get('effort') === 'defaut' ? '' : (P.get('effort') || 'high'), effortDefaut: P.get('effortDefaut') || 'medium'
       });
       if (VOCAL) etatVocal(FIGE || 'pret', P.get('enLigne') === '1');
       if (r[2]) window.bt.historique(r[2]);
@@ -238,6 +240,12 @@
       var req = o.request || {}, rep = {};
       if (req.subtype === 'initialize') rep = { models: MODELES, account: { subscriptionType: 'Claude Team' }, commands: [] };
       else if (req.subtype === 'set_model') rep = { model: req.model ? (MODELES.filter(function (m) { return m.value === req.model; })[0] || { resolvedModel: req.model }).resolvedModel : 'claude-fable-5-1' };
+      else if (req.subtype === 'rewind_conversation') {
+        // Maquette : accepte toujours, sauf ?reprise=refus (pour voir le message d'erreur).
+        rep = /[?&]reprise=refus/.test(location.search)
+          ? { rewound: false, prefillText: null, precedingAssistantUuid: null, error: 'target not found', reason: 'target_not_found' }
+          : { rewound: true, targetMessageUuid: req.target_message_uuid, prefillText: '', precedingAssistantUuid: null };
+      }
       else if (req.subtype === 'interrupt') {
         rep = { still_queued: [] };
         // Interruption déjà contenue dans l'enregistrement : on la laisse jouer telle quelle.
