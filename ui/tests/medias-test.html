@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<!-- Banc du lecteur intégré, chargé dans une vraie WKWebView avec le schéma btmedia:// (voir medias-test.js). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: btmedia:; media-src btmedia:; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<title>Banc médias</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/code.css">
+<link rel="stylesheet" href="../css/medias.css">
+</head>
+<body class="pret">
+<main id="fil" class="fil"></main>
+<script src="../vendor/marked-18.1.1.umd.js"></script>
+<script src="../vendor/purify-3.4.17.min.js"></script>
+<script src="../vendor/highlight-11.12.0.min.js"></script>
+<script src="../js/commun.js"></script>
+<script src="../js/medias.js"></script>
+<script src="../js/markdown.js"></script>
+<script src="medias-test.js"></script>
+</body>
+</html>
