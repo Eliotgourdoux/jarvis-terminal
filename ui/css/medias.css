@@ -13,7 +13,6 @@
   background: var(--surface);
 }
 .media-image { width: fit-content; max-width: min(100%, 420px); }
-.media-video { width: min(100%, 480px); }
 .media-audio { width: min(100%, 420px); }
 
 .media-cadre { position: relative; background: var(--code); line-height: 0; }
@@ -30,7 +29,7 @@
 }
 .media-gif-jouer:hover { border-color: var(--accent); }
 
-.media-video video { display: block; width: 100%; max-height: 420px; background: #000; }
+.media-video video { display: block; width: 100%; height: auto; background: #000; object-fit: contain; }
 .media-audio audio { display: block; width: calc(100% - 20px); height: 40px; margin: 10px 10px 0; }
 
 .media-legende {
@@ -51,6 +50,56 @@
 }
 .media-ouvrir:hover { color: var(--texte); border-color: var(--accent); }
 .media-ouvrir:focus-visible, .media-gif-jouer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Mur de vidéos (une ou plusieurs) : centré, largeur posée par medias.js (Petit, Colonne, Grand ou tirée à la
+ * poignée). En « Grand », il déborde de la colonne des deux côtés et passe devant la mascotte. */
+.medias > .media-mur { align-self: center; }
+.tour-eliot > .medias > .media-mur, .tg-eliot > .medias > .media-mur { align-self: flex-end; }
+.media-mur {
+  position: relative; box-sizing: border-box; width: 100%; max-width: none;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.media-mur.media-deborde { z-index: 11; }
+/* content-visibility: auto rogne ce qui dépasse du message (mur en « Grand », poignée hors du bord) : levé là où il y a un mur. */
+.tour-claude:has(.media-mur), .tour-eliot:has(.media-mur) { content-visibility: visible; }
+.mur-grille { display: flex; flex-direction: column; gap: 8px; }
+.mur-rang { display: flex; justify-content: center; gap: 8px; }
+.mur-rang > .media-video { flex: none; max-width: none; }
+.case-etroite .media-nom { display: none; }
+.mur-replis { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.mur-replis:empty { display: none; }
+.mur-vide .mur-grille, .mur-vide .mur-barre, .mur-vide .mur-poignee { display: none; }
+
+.mur-barre {
+  flex-wrap: wrap; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface);
+}
+.mur-barre .media-nom { flex: 1 1 120px; }
+.mur-barre > .media-type + .mur-tailles { margin-left: auto; }
+.mur-tailles {
+  display: inline-flex; flex: none; overflow: hidden;
+  border: 1px solid var(--bord-fort); border-radius: 7px;
+}
+.mur-tailles button {
+  padding: 3px 9px; border: 0; cursor: pointer;
+  background: var(--surface-2); color: var(--dim); font: 600 12px/1.3 var(--police);
+}
+.mur-tailles button + button { border-left: 1px solid var(--bord-fort); }
+.mur-tailles button:hover { color: var(--texte); }
+.mur-tailles button[aria-pressed="true"] { background: var(--accent-fond); color: var(--texte); }
+.mur-tailles button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mur-barre .media-ouvrir { margin-left: 0; }
+.mur-barre > .mur-tailles + .media-ouvrir { margin-left: 0; }
+
+/* Poignée de redimensionnement : bord droit du mur, visible au survol. */
+.mur-poignee {
+  position: absolute; top: 0; bottom: 0; right: -14px; width: 8px;
+  border-radius: 4px; cursor: ew-resize; touch-action: none;
+  background: var(--bord-fort); opacity: 0; transition: opacity .15s;
+}
+.media-mur:hover .mur-poignee, .mur-tire .mur-poignee { opacity: 1; }
+.mur-poignee:hover, .mur-tire .mur-poignee { background: var(--accent); }
+.mur-tire, .mur-tire * { cursor: ew-resize !important; user-select: none; }
+.mur-tire video { pointer-events: none; }
 
 /* Repli : format que WebKit ne lit pas, fichier absent ou refusé. */
 .media-repli {
