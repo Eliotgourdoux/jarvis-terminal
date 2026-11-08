@@ -1,0 +1,45 @@
+/* Better Terminal For Claude — mode vocal « Jarvis » dans la fenêtre de session.
+ * Version opaque (07/11/2026) : aucun fond transparent, aucun dégradé, aucune lueur. */
+
+.icone { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round; }
+
+.bouton-jarvis { gap: 8px; padding-left: 10px; }
+.bouton-jarvis .icone-micro { color: var(--faint); transition: color .12s ease-out; }
+.bouton-jarvis:hover .icone-micro { color: var(--texte); }
+.jarvis-temoin { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--bord-fort); }
+.bouton-jarvis.vocal-actif { color: #fff; background: var(--accent-fond); border-color: #463A78; }
+.bouton-jarvis.vocal-actif:hover { background: #2C2650; }
+.bouton-jarvis.vocal-actif .icone-micro { color: var(--accent); }
+.bouton-jarvis.vocal-actif .jarvis-temoin { background: var(--vert); }
+/* mains libres : le témoin dit ce que fait le micro (couleur fixe, aucune animation) */
+.bouton-jarvis.vocal-actif[data-etat="entend"] .jarvis-temoin { background: var(--accent); }
+.bouton-jarvis.vocal-actif[data-etat="transcription"] .jarvis-temoin,
+.bouton-jarvis.vocal-actif[data-etat="parle"] .jarvis-temoin { background: var(--accent); }
+.bouton-jarvis.vocal-actif[data-etat="erreur"] .jarvis-temoin { background: var(--ambre); }
+
+.barre-vocal {
+  --c: var(--lien);
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  font: 500 12.5px var(--police); color: var(--dim); white-space: nowrap;
+  padding: 3px 10px 3px 8px; border-radius: 6px;
+  background: var(--surface-2); border: 1px solid var(--bord);
+}
+.barre-vocal-icone { display: inline-flex; color: var(--faint); }
+.barre-vocal .icone { width: 14px; height: 14px; }
+.barre-vocal.etat-parle { --c: var(--accent); }
+.barre-vocal.en-ligne { color: #fff; background: var(--accent-fond); border-color: var(--c); }
+.barre-vocal.en-ligne .barre-vocal-icone { color: var(--c); }
+.barre-vocal.etat-erreur { color: var(--ambre); }
+.barre-vocal.etat-erreur .barre-vocal-icone { color: var(--ambre); }
+
+.bulle-meta .icone-meta { width: 12px; height: 12px; margin-right: 5px; vertical-align: -2px; color: var(--accent); }
+.bulle.dictee { border-color: #463A78; }
+
+.q-vocal { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 8px; font-size: 13px; color: var(--dim); }
+.q-vocal-icone { display: inline-flex; color: var(--accent); }
+.q-vocal .icone { width: 14px; height: 14px; }
+.q-vocal.en-ligne {
+  width: fit-content; max-width: 100%; box-sizing: border-box; padding: 3px 12px 3px 9px; border-radius: 6px; color: #fff;
+  background: var(--accent-fond); border: 1px solid var(--accent);
+}
+.q-vocal-entendu { color: var(--ambre); }
