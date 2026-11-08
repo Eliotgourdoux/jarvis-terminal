@@ -1,0 +1,44 @@
+/* Jarvis Terminal — bandeau « Agents au travail » au-dessus de la saisie (js/agents.js). Sobre et opaque. */
+.pied > .agents { width: min(var(--largeur), 100%); box-sizing: border-box; }
+.agents {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 8px 6px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--bord);
+  max-height: 38vh; overflow-y: auto;
+}
+.agents-titre {
+  padding: 0 8px 4px; font: 600 11.5px var(--police); letter-spacing: .02em;
+  color: var(--faint); text-transform: uppercase;
+}
+.agent-tete {
+  display: grid; grid-template-columns: 8px minmax(0, max-content) minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  width: 100%; box-sizing: border-box; padding: 6px 8px; border: 0; border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: background-color .12s ease-out;
+}
+.agent-tete:hover { background: var(--surface-2); }
+.agent-point { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.agent-mission {
+  font: 600 13.5px var(--police); color: var(--texte);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 36ch;
+}
+.agent-action {
+  font-size: 13px; color: var(--dim); min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.agent-meta { font: 12px var(--police); color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.agent.fini .agent-point { background: var(--vert); }
+.agent.fini .agent-action { color: var(--vert); }
+
+.agent-etapes {
+  list-style: none; margin: 2px 0 6px 26px; padding: 6px 0 2px 12px;
+  border-left: 1px solid var(--bord-fort);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.agent-etapes li { display: flex; gap: 8px; font-size: 12.5px; line-height: 1.45; min-width: 0; }
+.agent-verbe { flex: none; color: var(--dim); }
+.agent-cible { color: var(--texte); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-cible.mono { font-family: var(--police-code); font-size: 12px; }
+.agent-etapes li.agent-dit { display: block; color: var(--dim); font-style: italic; white-space: normal; padding-top: 3px; }
+.agent-etapes li.agent-vide { color: var(--faint); }

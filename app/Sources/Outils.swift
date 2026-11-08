@@ -191,7 +191,7 @@ enum BinaireClaude {
 
 // MARK: - Registre des projets (~/.config/projets/registry.json)
 
-struct InfoProjet { let nom: String; let emoji: String }
+struct InfoProjet { let nom: String; let emoji: String; var id: String? = nil }
 
 enum RegistreProjets {
     /// Tests seulement : `BT_DEV_REGISTRE` (pilote actif) remplace le registre, pour donner des noms de
@@ -202,12 +202,12 @@ enum RegistreProjets {
         let defaut = InfoProjet(nom: (cwd as NSString).lastPathComponent, emoji: "📁")
         guard let d = FileManager.default.contents(atPath: chemin),
               let liste = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return defaut }
-        let projets: [(chemin: String, nom: String, emoji: String)] = liste.compactMap {
+        let projets: [(chemin: String, nom: String, emoji: String, id: String?)] = liste.compactMap {
             guard let c = $0["chemin"] as? String, !c.isEmpty else { return nil }
-            return (cheminReel((c as NSString).expandingTildeInPath), $0["nom"] as? String ?? "", $0["emoji"] as? String ?? "")
+            return (cheminReel((c as NSString).expandingTildeInPath), $0["nom"] as? String ?? "", $0["emoji"] as? String ?? "", $0["id"] as? String)
         }
-        func vers(_ p: (chemin: String, nom: String, emoji: String)) -> InfoProjet {
-            InfoProjet(nom: p.nom.isEmpty ? defaut.nom : p.nom, emoji: p.emoji.isEmpty ? defaut.emoji : p.emoji)
+        func vers(_ p: (chemin: String, nom: String, emoji: String, id: String?)) -> InfoProjet {
+            InfoProjet(nom: p.nom.isEmpty ? defaut.nom : p.nom, emoji: p.emoji.isEmpty ? defaut.emoji : p.emoji, id: p.id)
         }
         if let p = projets.first(where: { $0.chemin == cwd }) { return vers(p) }
         // Sous-dossier d'un projet. Les dossiers « parents » d'autres projets (home, ~/Desktop/Projets)
