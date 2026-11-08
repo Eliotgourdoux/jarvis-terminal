@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<!-- Banc du mur de vidéos (js/medias.js), chargé dans une vraie WKWebView avec btmedia:// (voir /tmp/bt-capture/capture-mur). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: btmedia:; media-src btmedia:; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<title>Banc mur de vidéos</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/code.css">
+<link rel="stylesheet" href="../css/medias.css">
+</head>
+<body class="pret">
+<div class="defile"><main id="fil" class="fil" style="opacity:1"></main></div>
+<script src="../vendor/marked-18.1.1.umd.js"></script>
+<script src="../vendor/purify-3.4.17.min.js"></script>
+<script src="../vendor/highlight-11.12.0.min.js"></script>
+<script src="../js/commun.js"></script>
+<script src="../js/medias.js"></script>
+<script src="../js/markdown.js"></script>
+<script src="mur-test.js"></script>
+</body>
+</html>
