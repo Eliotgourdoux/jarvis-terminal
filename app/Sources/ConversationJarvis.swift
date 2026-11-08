@@ -23,6 +23,10 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
     private static let chatBeeper = "!1alVXIHrqV4p3wlctRw1:beeper.local"
     private static let apiBeeper = "http://localhost:23373/v1"
     private var envoisEnCours = 0
+    /// Vocal enregistré dans la fenêtre Jarvis (08/11/2026) : part comme un vrai vocal Telegram, par Beeper.
+    private let micro = CaptureMicro()
+    /// Vocaux dont l'envoi a échoué, gardés pour « Réessayer » (id de la page → fichier ogg).
+    private var vocauxEnEchec: [String: (url: URL, duree: Double)] = [:]
 
     let vue = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 780))
     private(set) var web: WKWebView?
@@ -243,6 +247,178 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
         }.resume()
     }
 
+    // MARK: - Vocal
+
+    private func vocalEtat(_ etat: String, _ raison: String = "") {
+        appeler("window.fil && window.fil.vocal && window.fil.vocal(e)", ["e": ["etat": etat, "raison": raison]])
+    }
+
+    /// Bouton micro : autorisation macOS si besoin, puis enregistrement (WAV 16 kHz mono, comme la dictée).
+    private func demarrerVocal() {
+        switch AutorisationMicro.etat {
+        case .authorized: lancerEnregistrement()
+        case .notDetermined:
+            AutorisationMicro.demander { [weak self] ok in
+                if ok { self?.lancerEnregistrement() }
+                else { self?.vocalEtat("erreur", "Micro refusé par macOS.") }
+            }
+        default:
+            vocalEtat("erreur", "Micro refusé : System Settings → Privacy & Security → Microphone.")
+            AutorisationMicro.ouvrirReglages()
+        }
+    }
+
+    private func lancerEnregistrement() {
+        let u = FileManager.default.temporaryDirectory.appendingPathComponent("jarvis-vocal-\(UUID().uuidString).wav")
+        micro.surNiveau = { [weak self] n in
+            self?.appeler("window.fil && window.fil.niveau && window.fil.niveau(n)", ["n": Double(n)])
+        }
+        do {
+            try micro.demarrer(vers: u)
+            journal("jarvis : enregistrement d'un vocal")
+            vocalEtat("enregistre")
+        } catch {
+            journal("jarvis : micro indisponible — \(error)")
+            vocalEtat("erreur", "Micro indisponible : \(error)")
+        }
+    }
+
+    /// Fin de l'enregistrement : WAV → ogg/opus (format des vocaux Telegram), puis envoi.
+    private func terminerVocal(id: String) {
+        guard let r = micro.arreter() else { finVocal(id, "rien n'a été enregistré"); return }
+        journal("jarvis : vocal de \(String(format: "%.1f", r.duree)) s, niveau max \(String(format: "%.2f", r.niveauMax))")
+        if r.duree < 0.6 { try? FileManager.default.removeItem(at: r.url); finVocal(id, "vocal trop court"); return }
+        if r.niveauMax < 0.12 { try? FileManager.default.removeItem(at: r.url); finVocal(id, "le micro n'a rien capté (silence)"); return }
+        envoisEnCours += 1
+        verifierOccupe()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let ogg = r.url.deletingPathExtension().appendingPathExtension("ogg")
+            let ok = Self.convertirOpus(r.url, ogg)
+            try? FileManager.default.removeItem(at: r.url)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard ok else { self.envoisEnCours = max(0, self.envoisEnCours - 1); self.finVocal(id, "conversion en opus impossible (ffmpeg)"); return }
+                self.envoyerVocalParBeeper(ogg, duree: r.duree) { erreur in
+                    self.envoisEnCours = max(0, self.envoisEnCours - 1)
+                    if erreur == nil { try? FileManager.default.removeItem(at: ogg) }
+                    else { self.vocauxEnEchec[id] = (ogg, r.duree) }
+                    self.finVocal(id, erreur)
+                }
+            }
+        }
+    }
+
+    private func reessayerVocal(id: String) {
+        guard let v = vocauxEnEchec.removeValue(forKey: id) else { finVocal(id, "le fichier du vocal n'existe plus"); return }
+        envoisEnCours += 1
+        verifierOccupe()
+        envoyerVocalParBeeper(v.url, duree: v.duree) { [weak self] erreur in
+            guard let self else { return }
+            self.envoisEnCours = max(0, self.envoisEnCours - 1)
+            if erreur == nil { try? FileManager.default.removeItem(at: v.url) } else { self.vocauxEnEchec[id] = v }
+            self.finVocal(id, erreur)
+        }
+    }
+
+    private func finVocal(_ id: String, _ erreur: String?) {
+        appeler("window.fil && window.fil.envoye(id, ok, raison)", ["id": id, "ok": erreur == nil, "raison": erreur ?? ""])
+        verifierOccupe()
+    }
+
+    private static func convertirOpus(_ wav: URL, _ ogg: URL) -> Bool {
+        guard let ff = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else { return false }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: ff)
+        p.arguments = ["-loglevel", "error", "-y", "-i", wav.path, "-c:a", "libopus", "-b:a", "32k", "-ar", "48000", "-ac", "1", ogg.path]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0 && ((try? ogg.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 0
+    }
+
+    /// Même chemin que beeper-say.sh : dépôt du fichier (/assets/upload), puis message de type « voice-note ».
+    private func envoyerVocalParBeeper(_ ogg: URL, duree: Double, essai: Int = 1, fini: @escaping (String?) -> Void) {
+        let jeton = (try? String(contentsOfFile: NSHomeDirectory() + "/.config/beeper/token", encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !jeton.isEmpty else { fini("jeton Beeper introuvable (~/.config/beeper/token)"); return }
+        guard let donnees = try? Data(contentsOf: ogg) else { fini("fichier du vocal illisible"); return }
+        let frontiere = "bt-" + UUID().uuidString
+        var corps = Data()
+        func champ(_ nom: String, _ valeur: String) {
+            corps.append("--\(frontiere)\r\nContent-Disposition: form-data; name=\"\(nom)\"\r\n\r\n\(valeur)\r\n".data(using: .utf8)!)
+        }
+        corps.append("--\(frontiere)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"vocal.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n".data(using: .utf8)!)
+        corps.append(donnees)
+        corps.append("\r\n".data(using: .utf8)!)
+        champ("fileName", "vocal.ogg")
+        champ("mimeType", "audio/ogg")
+        corps.append("--\(frontiere)--\r\n".data(using: .utf8)!)
+        guard let urlDepot = URL(string: "\(Self.apiBeeper)/assets/upload") else { fini("requête impossible"); return }
+        var req = URLRequest(url: urlDepot, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(frontiere)", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer " + jeton, forHTTPHeaderField: "Authorization")
+        req.httpBody = corps
+        URLSession.shared.dataTask(with: req) { [weak self] data, rep, err in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let err = err as? URLError, [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .timedOut].contains(err.code) {
+                    if essai == 1 {
+                        journal("jarvis : Beeper injoignable pour le vocal, lancement caché puis nouvel essai")
+                        BeeperDiscret.lancer { pret in
+                            if pret { self.envoyerVocalParBeeper(ogg, duree: duree, essai: 2, fini: fini) }
+                            else { fini("Beeper Desktop ne démarre pas. Ouvre-le, puis réessaie.") }
+                        }
+                    } else { fini("Beeper Desktop ne répond pas. Ouvre-le, puis réessaie.") }
+                    return
+                }
+                if let err { fini("erreur réseau : \(err.localizedDescription)"); return }
+                let code = (rep as? HTTPURLResponse)?.statusCode ?? 0
+                let o = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+                guard (200..<300).contains(code), let idDepot = o["uploadID"] as? String, !idDepot.isEmpty else {
+                    journal("jarvis : dépôt du vocal refusé (\(code))")
+                    fini(code == 401 || code == 403 ? "Beeper refuse le jeton (code \(code))" : "Beeper refuse le fichier du vocal (code \(code))")
+                    return
+                }
+                var piece: [String: Any] = ["uploadID": idDepot, "type": "voice-note", "fileName": "vocal.ogg", "mimeType": "audio/ogg"]
+                piece["duration"] = (o["duration"] as? Double) ?? duree
+                self.posterMessageBeeper(["attachment": piece], jeton: jeton) { erreur in
+                    if erreur == nil { journal("jarvis : vocal envoyé par Beeper (\(String(format: "%.1f", duree)) s)") }
+                    fini(erreur)
+                }
+            }
+        }.resume()
+    }
+
+    private func posterMessageBeeper(_ objet: [String: Any], jeton: String, fini: @escaping (String?) -> Void) {
+        let permis = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        guard let chat = Self.chatBeeper.addingPercentEncoding(withAllowedCharacters: permis),
+              let url = URL(string: "\(Self.apiBeeper)/chats/\(chat)/messages"),
+              let corps = try? JSONSerialization.data(withJSONObject: objet) else { fini("requête impossible"); return }
+        var req = URLRequest(url: url, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer " + jeton, forHTTPHeaderField: "Authorization")
+        req.httpBody = corps
+        URLSession.shared.dataTask(with: req) { data, rep, err in
+            DispatchQueue.main.async {
+                if let err { fini("erreur réseau : \(err.localizedDescription)"); return }
+                let code = (rep as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200..<300).contains(code) else {
+                    var detail = ""
+                    if let data, let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        detail = (o["message"] as? String) ?? (o["error"] as? String) ?? ""
+                    }
+                    journal("jarvis : Beeper a répondu \(code) \(extrait(detail, 200))")
+                    fini("Beeper a répondu une erreur (code \(code))" + (detail.isEmpty ? "" : " : " + String(detail.prefix(140))))
+                    return
+                }
+                fini(nil)
+            }
+        }.resume()
+    }
+
     // MARK: - Page
 
     private func appeler(_ code: String, _ args: [String: Any]) {
@@ -275,6 +451,17 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
                 self.appeler("window.fil && window.fil.envoye(id, ok, raison)", ["id": id, "ok": erreur == nil, "raison": erreur ?? ""])
                 self.verifierOccupe()
             }
+        case "vocalDebut":
+            demarrerVocal()
+        case "vocalAnnuler":
+            micro.arreterSansResultat()
+            journal("jarvis : vocal annulé")
+        case "vocalEnvoyer":
+            terminerVocal(id: o["id"] as? String ?? "")
+        case "vocalReessayer":
+            reessayerVocal(id: o["id"] as? String ?? "")
+        case "vocalOublier":
+            if let v = vocauxEnEchec.removeValue(forKey: o["id"] as? String ?? "") { try? FileManager.default.removeItem(at: v.url) }
         case "copier":
             if let t = o["texte"] as? String {
                 NSPasteboard.general.clearContents(); NSPasteboard.general.setString(t, forType: .string)

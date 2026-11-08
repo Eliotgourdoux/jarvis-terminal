@@ -102,6 +102,28 @@ body.tg { display: flex; flex-direction: column; }
 .tg-envoyer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .tg-aide { margin: 6px 4px 0; font-size: 11.5px; color: var(--faint); }
 
+/* Vocal : bouton micro, puis barre d'enregistrement à la place du champ. */
+.tg-micro {
+  flex: none; width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 9px; background: transparent; color: var(--dim); cursor: pointer;
+  transition: background-color .12s ease-out, color .12s ease-out;
+}
+.tg-micro:hover { color: #fff; background: var(--surface-3); }
+.tg-micro.actif { color: var(--rouge); }
+.tg-micro svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.tg-saisie.enregistre { border-color: var(--rouge); }
+.tg-vocal-barre { flex: 1; display: flex; align-items: center; gap: 12px; min-height: 34px; }
+.tg-vocal-barre[hidden] { display: none; }
+.tg-vocal-point { width: 9px; height: 9px; border-radius: 50%; background: var(--rouge); flex: none; }
+.tg-vocal-temps { font: 600 14px var(--police); font-variant-numeric: tabular-nums; color: var(--texte); min-width: 38px; }
+.tg-vocal-niveau { flex: 1; max-width: 220px; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.tg-vocal-niveau > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .08s linear; }
+.tg-vocal-aide { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.tg-vocal-annuler { margin-left: auto; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--bord); background: none;
+  color: var(--dim); font: 500 12.5px var(--police); cursor: pointer; }
+.tg-vocal-annuler:hover { color: #fff; border-color: var(--bord-fort); }
+@media (max-width: 560px) { .tg-vocal-aide { display: none; } }
+
 .tg-en-bas {
   position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 5;
   padding: 6px 14px; border-radius: 16px; border: 1px solid var(--bord-fort);

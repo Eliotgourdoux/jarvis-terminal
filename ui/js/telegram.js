@@ -263,7 +263,7 @@
       if (a.etat === 'echec') return true;
       for (var i = Math.max(a.apres, entrees.length - 40); i < entrees.length; i++) {
         var e = entrees[i];
-        if (e.auteur === 'eliot' && !e.pris && e.corps.trim() === a.texte) { e.pris = true; return false; }
+        if (e.auteur === 'eliot' && !e.pris && (a.vocal ? e.genre === 'vocal' : e.corps.trim() === a.texte)) { e.pris = true; return false; }
       }
       return true;
     });
@@ -276,7 +276,21 @@
     attentes.forEach(function (a) {
       var box = el('div', 'tg-eliot ' + (a.etat === 'echec' ? 'tg-echec' : 'tg-en-cours'));
       box.appendChild(el('div', 'bulle', el('div', 'bulle-texte', a.texte)));
-      if (a.etat === 'echec') {
+      if (a.etat === 'echec' && a.vocal) {
+        var mv = el('div', 'bulle-meta', 'Pas parti : ' + (a.raison || 'erreur inconnue') + ' ');
+        if (a.reessayable) {
+          var rv = el('button', 'tg-reprendre', 'Réessayer'); rv.type = 'button';
+          rv.addEventListener('click', function () { a.etat = 'envoi'; rendreAttentes(); majStatut(); poster({ type: 'vocalReessayer', id: a.id }); });
+          mv.appendChild(rv);
+        }
+        var ov = el('button', 'tg-reprendre', 'Retirer'); ov.type = 'button';
+        ov.addEventListener('click', function () {
+          attentes = attentes.filter(function (x) { return x !== a; });
+          poster({ type: 'vocalOublier', id: a.id }); rendreAttentes(); majStatut();
+        });
+        mv.appendChild(ov);
+        box.appendChild(mv);
+      } else if (a.etat === 'echec') {
         var meta = el('div', 'bulle-meta', 'Pas parti : ' + (a.raison || 'erreur inconnue') + ' ');
         var re = el('button', 'tg-reprendre', 'Remettre dans la saisie');
         re.type = 'button';
@@ -288,7 +302,7 @@
         meta.appendChild(re);
         box.appendChild(meta);
       } else {
-        box.appendChild(el('div', 'bulle-meta', a.etat === 'depose' ? 'Envoyé, Jarvis va le lire…' : 'Envoi par Beeper…'));
+        box.appendChild(el('div', 'bulle-meta', a.etat === 'depose' ? (a.vocal ? 'Envoyé, Jarvis va l’écouter…' : 'Envoyé, Jarvis va le lire…') : 'Envoi par Beeper…'));
       }
       attente.appendChild(box);
     });
@@ -324,11 +338,73 @@
     poster({ type: 'envoyer', id: id, texte: t });
   }
 
+  /* ---------------- Vocal (08/11/2026) ----------------
+     Micro → la coque enregistre, convertit en opus et l'envoie par Beeper comme un vrai vocal Telegram :
+     Jarvis le reçoit exactement comme un vocal du téléphone (transcription, réponse en vocal). */
+  var micro = $('micro'), barreVocal = $('vocal-barre'), tempsVocal = $('vocal-temps'), niveauVocal = $('vocal-niveau');
+  var vocal = null;   // { debut, minuterie } pendant l'enregistrement ; 'demande' en attendant la coque
+
+  function dureeTexte(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+
+  function modeVocal(actif) {
+    saisie.hidden = actif;
+    barreVocal.hidden = !actif;
+    micro.classList.toggle('actif', actif);
+    micro.title = actif ? 'Annuler le vocal' : 'Enregistrer un vocal';
+    document.querySelector('.tg-saisie').classList.toggle('enregistre', actif);
+    if (actif) bouton.disabled = false; else ajuster();
+  }
+
+  function commencerVocal() {
+    if (vocal) return;
+    if (!pont) { modeVocalDemo(); return; }
+    vocal = 'demande';
+    poster({ type: 'vocalDebut' });
+  }
+
+  function arreterMinuterie() { if (vocal && vocal.minuterie) clearInterval(vocal.minuterie); }
+
+  function annulerVocal() {
+    if (!vocal) return;
+    arreterMinuterie();
+    vocal = null;
+    modeVocal(false);
+    poster({ type: 'vocalAnnuler' });
+    saisie.focus();
+  }
+
+  function envoyerVocal() {
+    if (!vocal || vocal === 'demande') return;
+    arreterMinuterie();
+    var duree = (Date.now() - vocal.debut) / 1000;
+    vocal = null;
+    modeVocal(false);
+    var id = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    attentes.push({ id: id, vocal: true, texte: '🎙️ Vocal · ' + dureeTexte(duree), etat: 'envoi', apres: entrees.length });
+    rendreAttentes(); majStatut(); allerEnBas();
+    poster({ type: 'vocalEnvoyer', id: id });
+    saisie.focus();
+  }
+
+  function modeVocalDemo() {   // aperçu navigateur : barre sans micro
+    vocal = { debut: Date.now() };
+    modeVocal(true);
+    vocal.minuterie = setInterval(function () { tempsVocal.textContent = dureeTexte((Date.now() - vocal.debut) / 1000); }, 250);
+  }
+
+  micro.addEventListener('click', function () { if (vocal) annulerVocal(); else commencerVocal(); });
+  $('vocal-annuler').addEventListener('click', annulerVocal);
+  document.addEventListener('keydown', function (e) {
+    if (!vocal || vocal === 'demande') return;
+    if (e.key === 'Escape') { e.preventDefault(); annulerVocal(); }
+    else if (e.key === 'Enter') { e.preventDefault(); envoyerVocal(); }
+  }, true);
+
   saisie.addEventListener('input', ajuster);
   saisie.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); envoyer(); }
   });
-  bouton.addEventListener('click', envoyer);
+  bouton.addEventListener('click', function () { if (vocal) envoyerVocal(); else envoyer(); });
 
   /* Liens, fichiers, boutons Copier : la vue ne navigue jamais. */
   document.addEventListener('click', function (e) {
@@ -356,8 +432,28 @@
     tout: function (t) { brut = String(t || ''); entrees = []; rendus = []; fil.textContent = ''; majFil(true); },
     ajout: function (t) { brut += String(t || ''); majFil(false); },
     etat: function (e) { etatRouteur = e || etatRouteur; majStatut(); },
+    vocal: function (e) {
+      if (!e) return;
+      if (e.etat === 'enregistre' && vocal === 'demande') {
+        vocal = { debut: Date.now() };
+        tempsVocal.textContent = '0:00'; niveauVocal.style.width = '0%';
+        modeVocal(true);
+        vocal.minuterie = setInterval(function () { if (vocal && vocal.debut) tempsVocal.textContent = dureeTexte((Date.now() - vocal.debut) / 1000); }, 250);
+      } else if (e.etat === 'erreur') {
+        arreterMinuterie(); vocal = null; modeVocal(false);
+        statut.hidden = false; statut.className = 'tg-statut alerte'; statut.textContent = e.raison || 'Micro indisponible.';
+        setTimeout(majStatut, 6000);
+      }
+    },
+    niveau: function (n) { if (vocal && vocal.debut) niveauVocal.style.width = Math.round(Math.max(0, Math.min(1, n)) * 100) + '%'; },
     envoye: function (id, ok, raison) {
-      attentes.forEach(function (a) { if (a.id === id) { a.etat = ok ? 'depose' : 'echec'; a.raison = raison || ''; } });
+      attentes.forEach(function (a) {
+        if (a.id === id) {
+          a.etat = ok ? 'depose' : 'echec'; a.raison = raison || '';
+          // Échec après conversion (Beeper fermé, erreur réseau) : le fichier est gardé, on peut réessayer.
+          if (a.vocal) a.reessayable = !ok && !/court|silence|rien n.a été|conversion/.test(a.raison);
+        }
+      });
       nettoyerAttentes(); majStatut();
     },
     focus: function () { saisie.focus(); }

@@ -32,11 +32,21 @@
     <div id="statut" class="tg-statut" hidden></div>
     <div class="tg-saisie">
       <textarea id="saisie" rows="1" placeholder="Écris à Jarvis…" aria-label="Message à Jarvis"></textarea>
+      <div id="vocal-barre" class="tg-vocal-barre" hidden>
+        <span class="tg-vocal-point" aria-hidden="true"></span>
+        <span id="vocal-temps" class="tg-vocal-temps">0:00</span>
+        <span class="tg-vocal-niveau" aria-hidden="true"><span id="vocal-niveau"></span></span>
+        <span class="tg-vocal-aide">Entrée pour envoyer · Échap pour annuler</span>
+        <button type="button" id="vocal-annuler" class="tg-vocal-annuler">Annuler</button>
+      </div>
+      <button type="button" id="micro" class="tg-micro" title="Enregistrer un vocal" aria-label="Enregistrer un vocal">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.7a2.3 2.3 0 0 1 2.3 2.3v3.5a2.3 2.3 0 0 1-4.6 0V4A2.3 2.3 0 0 1 8 1.7z"/><path d="M3.6 7.3a4.4 4.4 0 0 0 8.8 0"/><path d="M8 11.8v2.5"/></svg>
+      </button>
       <button type="button" id="envoyer" class="tg-envoyer" title="Envoyer (Entrée)" aria-label="Envoyer" disabled>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2"/></svg>
       </button>
     </div>
-    <div class="tg-aide">Entrée pour envoyer · ⇧Entrée pour aller à la ligne · envoyé depuis ton compte Telegram, par Beeper</div>
+    <div class="tg-aide">Entrée pour envoyer · ⇧Entrée pour aller à la ligne · micro pour un vocal · envoyé depuis ton compte Telegram, par Beeper</div>
   </div>
 </footer>
 
