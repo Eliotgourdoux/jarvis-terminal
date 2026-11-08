@@ -49,6 +49,24 @@ final class Session {
     /// Dernière fois que la fenêtre est passée au premier plan (routage vocal « fenêtre au premier plan »).
     private(set) var derniereActivation = Date()
 
+    // ⌘R : la page n'est qu'un écran. Elle repart de zéro, Claude continue ; Swift lui redonne ce que le
+    // transcript ne contient pas (tour en cours, réponse d'initialize, questions en attente) et ce qui est
+    // arrivé pendant le rechargement. Rien n'est écrit à Claude pour ça.
+    /// Tour en cours dans le processus actuel : vrai dès qu'un message part ou que Claude produit, faux au `result`.
+    private var tourEnCours = false
+    private var debutTour: Date?
+    /// `request_id` de l'initialize écrit par la page, et sa réponse (succès), redonnée à une page rechargée.
+    private var idInitialize: String?
+    private var reponseInitialize: [String: Any]?
+    /// `set_permission_mode` en vol (request_id → mode) : tient `current_permission_mode` à jour dans la réponse gardée.
+    private var modesDemandes: [String: String] = [:]
+    /// `can_use_tool` émis par Claude et pas encore répondus (ni annulés), dans l'ordre : ligne brute.
+    private var demandesEnAttente: [(id: String, ligne: String)] = []
+    /// Appels vers la page gardés entre le déchargement (⌘R) et l'envoi de l'historique à la nouvelle page.
+    private var tamponRechargement: [[Any]]?
+    /// Change à chaque déchargement : un historique lu pour une page déjà repartie n'est pas envoyé.
+    private var generationPage = 0
+
     var pid: Int32? { processus.flatMap { $0.fini ? nil : $0.pid } }
 
     var apercu: RegistreSessions.Apercu {
@@ -84,10 +102,11 @@ final class Session {
         case "pret": surPret()
         case "versClaude":
             guard let l = o["ligne"] as? String, l.utf8.count <= 20_000_000, !l.contains("\n"), !l.contains("\r"),
-                  let d = l.data(using: .utf8), (try? JSONSerialization.jsonObject(with: d)) is [String: Any]
+                  let d = l.data(using: .utf8), let objet = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
             else { refuser("versClaude : ligne invalide"); return }
             if let p = processus, !p.fini, arretVoulu == nil {
                 p.ecrire(l)
+                noterEnvoi(objet)
                 journal("session \(sessionId) : → stdin \(l.utf8.count) o \(typeDe(l))")
             } else if !fermee, !dansTerminal, processus == nil || arretVoulu == "relance" {
                 // claude pas encore lancé (environnement, lecture du transcript) ou en cours de relance :
@@ -202,18 +221,40 @@ final class Session {
         journal("session \(sessionId) : page prête\(dejaPrete ? " (rechargement)" : "")")
         pagePrete = true
         file.removeAll()
-        pousser("info", info())
-        dernierVocalEtat = nil
-        envoyerVocalEtat(MoteurVocal.shared.etatPage(pour: self))
         if !dejaPrete {
+            pousserDirect("info", info())
+            dernierVocalEtat = nil
+            envoyerVocalEtat(MoteurVocal.shared.etatPage(pour: self))
             dejaPrete = true
             if repriseDemandee { envoyerHistorique { [weak self] in self?.demarrer() } } else { demarrer() }
         } else {
             // ⌘R ou page rechargée : la conversation est reconstruite depuis le transcript (écrit au fil de l'eau).
+            // Le processus, lui, n'a rien vu : `info.direct` dit à la page où il en est (tour en cours, questions),
+            // puis ce qui est arrivé pendant le rechargement est rejoué après l'historique, dans l'ordre.
+            if tamponRechargement == nil { tamponRechargement = [] }
+            var i = info()
+            if let p = processus, !p.fini, arretVoulu == nil, !dansTerminal {
+                i["direct"] = [
+                    "tourEnCours": tourEnCours,
+                    "debutTour": debutTour.map { $0.timeIntervalSince1970 * 1000 } ?? NSNull(),
+                    "initialise": reponseInitialize ?? NSNull(),
+                    "enAttente": demandesEnAttente.map { $0.ligne }
+                ] as [String: Any]
+            }
+            journal("session \(sessionId) : page rechargée, tour en cours : \(tourEnCours), \(demandesEnAttente.count) question(s) en attente, initialize \(reponseInitialize == nil ? "à redemander" : "gardé")")
+            pousserDirect("info", i)
+            dernierVocalEtat = nil
+            envoyerVocalEtat(MoteurVocal.shared.etatPage(pour: self))
+            let gen = generationPage
             envoyerHistorique { [weak self] in
-                guard let self else { return }
-                if self.dansTerminal { self.pousser("fin", ["code": 0, "raison": "terminal"]) }
-                else if self.demarre, self.processus == nil || self.processus!.fini { self.pousser("fin", ["code": 0]) }
+                guard let self, gen == self.generationPage else { return }
+                let gardes = self.tamponRechargement ?? []
+                self.tamponRechargement = nil
+                if !gardes.isEmpty { journal("session \(self.sessionId) : \(gardes.count) appel(s) gardé(s) pendant le rechargement → page") }
+                gardes.forEach { self.pousserDirect($0[0] as! String, $0[1]) }
+                let finGardee = gardes.contains { $0[0] as? String == "fin" }
+                if self.dansTerminal { if !finGardee { self.pousser("fin", ["code": 0, "raison": "terminal"]) } }
+                else if self.demarre, !finGardee, self.processus == nil || self.processus!.fini { self.pousser("fin", ["code": 0]) }
             }
         }
     }
@@ -230,12 +271,14 @@ final class Session {
     /// Lit le transcript hors du fil principal et l'envoie (sans les lignes techniques volumineuses).
     private func envoyerHistorique(_ ensuite: @escaping () -> Void) {
         let (c, id) = (cwd, sessionId)
+        let gen = generationPage
         DispatchQueue.global(qos: .userInitiated).async {
             let lignes = Transcript.lignes(cwd: c, sessionId: id).filter { !$0.hasPrefix("{\"type\":\"api-request") }
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.fermee else { return }
                 journal("session \(id) : historique \(lignes.count) lignes")
-                self.pousser("historique", lignes)
+                // page repartie entre-temps (second ⌘R) : son propre `pret` renverra l'historique
+                if gen == self.generationPage { self.pousserDirect("historique", lignes) }
                 ensuite()
             }
         }
@@ -282,11 +325,15 @@ final class Session {
             }
             self.processus = p
             self.arretVoulu = nil
+            self.oublierProcessus()
             p.ecouter()
             journal("session \(self.sessionId) : pid \(p.pid) : \(exe) \(args.joined(separator: " "))")
             let enAttente = self.avantLancement
             self.avantLancement = []
-            enAttente.forEach { p.ecrire($0) }
+            enAttente.forEach { l in
+                p.ecrire(l)
+                if let o = (try? JSONSerialization.jsonObject(with: Data(l.utf8))) as? [String: Any] { self.noterEnvoi(o) }
+            }
             if !enAttente.isEmpty { journal("session \(self.sessionId) : \(enAttente.count) ligne(s) gardée(s) avant le lancement → stdin") }
             self.ecrireEtat()
             RegistreSessions.shared.signaler(self)
@@ -299,7 +346,16 @@ final class Session {
     // MARK: - stdout → page
 
     /// Le strict nécessaire pour le registre (dernier message, fin de tour, id réel) ; tout le reste est pour la page.
-    struct Analyse { var idInit: String?; var texte: String?; var finTour = false; var resultat: String? }
+    /// + ce qu'il faut pour redonner l'état du processus à une page rechargée (⌘R) : activité, questions, réponses de contrôle.
+    struct Analyse {
+        var idInit: String?; var texte: String?; var finTour = false; var resultat: String?
+        var activite = false
+        var demande: String?      // control_request can_use_tool : request_id
+        var annulation: String?   // control_cancel_request : request_id
+        var reponseId: String?    // control_response : request_id, succès, contenu
+        var reponseSucces = false
+        var reponseContenu: [String: Any]?
+    }
 
     static func analyser(_ l: String) -> Analyse? {
         if l.hasPrefix("{\"type\":\"stream_event\"") { return nil }
@@ -308,17 +364,33 @@ final class Session {
         var a = Analyse()
         switch t {
         case "system":
-            guard o["subtype"] as? String == "init" else { return nil }
-            a.idInit = o["session_id"] as? String
+            switch o["subtype"] as? String {
+            case "init": a.idInit = o["session_id"] as? String
+            case "status": guard o["status"] as? String == "requesting" else { return nil }; a.activite = true
+            case "session_state_changed": guard o["state"] as? String == "running" else { return nil }; a.activite = true
+            default: return nil
+            }
         case "assistant":
+            a.activite = true
             guard o["parent_tool_use_id"] == nil || o["parent_tool_use_id"] is NSNull,
-                  let m = o["message"] as? [String: Any], let c = m["content"] as? [[String: Any]] else { return nil }
+                  let m = o["message"] as? [String: Any], let c = m["content"] as? [[String: Any]] else { return a }
             let textes = c.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
-            guard !textes.isEmpty else { return nil }
-            a.texte = sansANSI(textes.joined(separator: "\n"))
+            if !textes.isEmpty { a.texte = sansANSI(textes.joined(separator: "\n")) }
         case "result":
             a.finTour = true
             if let r = o["result"] as? String { a.resultat = sansANSI(r) }
+        case "control_request":
+            guard let r = o["request"] as? [String: Any], r["subtype"] as? String == "can_use_tool",
+                  let id = o["request_id"] as? String else { return nil }
+            a.demande = id
+        case "control_cancel_request":
+            guard let id = o["request_id"] as? String else { return nil }
+            a.annulation = id
+        case "control_response":
+            guard let r = o["response"] as? [String: Any], let id = r["request_id"] as? String else { return nil }
+            a.reponseId = id
+            a.reponseSucces = r["subtype"] as? String == "success"
+            a.reponseContenu = r["response"] as? [String: Any]
         default: return nil
         }
         return a
@@ -334,7 +406,10 @@ final class Session {
 
     private func ligneClaude(_ l: String, _ a: Analyse?, de p: ProcessusClaude) {
         pousser("depuisClaude", l)
+        let actuel = p === processus   // suivi du processus courant seulement (pas d'un ancien qui s'arrête)
+        if actuel, a == nil, l.hasPrefix("{\"type\":\"stream_event\"") { marquerTour(true) }
         guard let a else { return }
+        if actuel { suivre(a, ligne: l) }
         if let id = a.idInit, Validation.sessionId(id), id.lowercased() != sessionId {
             journal("session \(sessionId) : init annonce l'id \(id), adopté")
             supprimerEtat()
@@ -351,9 +426,65 @@ final class Session {
         }
     }
 
+    // MARK: - Suivi du processus pour une page rechargée (⌘R)
+
+    /// Lignes de Claude (processus actuel) : tour, questions en attente, réponses de contrôle.
+    private func suivre(_ a: Analyse, ligne l: String) {
+        if a.activite { marquerTour(true) }
+        if a.finTour { marquerTour(false) }
+        if let id = a.demande, !demandesEnAttente.contains(where: { $0.id == id }) {
+            demandesEnAttente.append((id: id, ligne: l))
+            if demandesEnAttente.count > 50 { demandesEnAttente.removeFirst(demandesEnAttente.count - 50) }
+        }
+        if let id = a.annulation { demandesEnAttente.removeAll { $0.id == id } }
+        if let id = a.reponseId {
+            if id == idInitialize {
+                idInitialize = nil
+                if a.reponseSucces, let c = a.reponseContenu { reponseInitialize = c }
+            }
+            if let m = modesDemandes.removeValue(forKey: id), a.reponseSucces, reponseInitialize != nil {
+                reponseInitialize?["current_permission_mode"] = (a.reponseContenu?["mode"] as? String) ?? m
+            }
+        }
+    }
+
+    private func marquerTour(_ v: Bool) {
+        if v, !tourEnCours { debutTour = Date() }
+        if !v { debutTour = nil }
+        tourEnCours = v
+    }
+
+    /// Ce que l'app écrit sur stdin (page ou lignes gardées) : un message ouvre un tour, une réponse clôt une question,
+    /// et on retient l'initialize et les changements de mode pour pouvoir les redonner.
+    private func noterEnvoi(_ o: [String: Any]) {
+        switch o["type"] as? String {
+        case "user": marquerTour(true)
+        case "control_response":
+            if let r = o["response"] as? [String: Any], let id = r["request_id"] as? String {
+                demandesEnAttente.removeAll { $0.id == id }
+            }
+        case "control_request":
+            guard let id = o["request_id"] as? String, let r = o["request"] as? [String: Any] else { return }
+            switch r["subtype"] as? String {
+            case "initialize": idInitialize = id
+            case "set_permission_mode": if let m = r["mode"] as? String { modesDemandes[id] = m }
+            default: break
+            }
+        default: break
+        }
+    }
+
+    /// Nouveau processus (lancement, relance) : rien de l'ancien ne vaut pour lui.
+    private func oublierProcessus() {
+        tourEnCours = false; debutTour = nil
+        idInitialize = nil; reponseInitialize = nil
+        modesDemandes.removeAll(); demandesEnAttente.removeAll()
+    }
+
     private func finProcessus(_ p: ProcessusClaude, _ code: Int32) {
         journal("session \(sessionId) : pid \(p.pid) terminé, code \(code)\(arretVoulu.map { " (\($0))" } ?? "")")
         guard p === processus else { return }
+        oublierProcessus()
         if arretVoulu != nil { return }   // relance / terminal / fermeture : géré par l'action elle-même
         pousser("fin", ["code": code])
         etat = "termine"; maj = Date()
@@ -375,6 +506,7 @@ final class Session {
         let direct = { [weak self] in
             guard let self, let l = ClaudeArgs.messageUtilisateur(texte) else { return }
             p.ecrire(l)
+            self.marquerTour(true)
             journal("session \(self.sessionId) : → stdin (direct, \(source)) \(extrait(texte, 60))")
         }
         guard pagePrete else { direct(); return true }
@@ -385,7 +517,34 @@ final class Session {
 
     // MARK: - File vers la page
 
+    /// Pendant un rechargement (entre le déchargement et l'envoi de l'historique), les appels sont gardés pour la
+    /// nouvelle page, sauf le flux de jetons (`stream_event`) : le transcript et les lignes `assistant` le remplacent.
     private func pousser(_ fonction: String, _ argument: Any) {
+        if tamponRechargement != nil {
+            if Session.estFlux(fonction, argument) { return }
+            tamponRechargement!.append([fonction, argument])
+            Session.alleger(&tamponRechargement!)
+            return
+        }
+        pousserDirect(fonction, argument)
+    }
+
+    private static func estFlux(_ fonction: String, _ argument: Any) -> Bool {
+        fonction == "depuisClaude" && (argument as? String)?.hasPrefix("{\"type\":\"stream_event\"") == true
+    }
+
+    /// Rechargement très long : au-delà de 4000 appels gardés, on lâche d'abord les lignes `assistant` et `user`
+    /// (le transcript les contient), et au-delà de 10 000, les plus anciennes.
+    private static func alleger(_ t: inout [[Any]]) {
+        guard t.count > 4000 else { return }
+        t.removeAll { x in
+            guard x[0] as? String == "depuisClaude", let s = x[1] as? String else { return false }
+            return s.hasPrefix("{\"type\":\"assistant\"") || s.hasPrefix("{\"type\":\"user\"")
+        }
+        if t.count > 10_000 { t.removeFirst(t.count - 10_000) }
+    }
+
+    private func pousserDirect(_ fonction: String, _ argument: Any) {
         guard pagePrete else { return }
         file.append([fonction, argument])
         if !vidagePrevu {
@@ -403,7 +562,16 @@ final class Session {
     }
 
     /// La page se recharge (⌘R) ou son processus WebKit est mort : on attendra son prochain `pret`.
-    func pageDechargee() { pagePrete = false; file.removeAll() }
+    /// Claude, lui, continue : ce qui était en file et ce qui arrive ensuite est gardé pour la nouvelle page.
+    func pageDechargee() {
+        generationPage += 1
+        pagePrete = false
+        if dejaPrete, !fermee {
+            tamponRechargement = (tamponRechargement ?? []) + file.filter { !Session.estFlux($0[0] as? String ?? "", $0[1]) }
+            Session.alleger(&tamponRechargement!)
+        }
+        file.removeAll()
+    }
 
     // MARK: - Relancer, terminal, fermer
 
@@ -490,6 +658,7 @@ final class Session {
         fermee = true
         arretVoulu = "fermer"
         avantLancement.removeAll()
+        tamponRechargement = nil
         journal("session \(sessionId) : fermeture")
         for id in questionsOuvertes { BoiteQuestions.shared.oublier(id); Questions.clore(id, texte: "session fermée") }
         questionsOuvertes.removeAll()
@@ -516,7 +685,7 @@ final class Session {
         questionsOuvertes.removeAll()
         MoteurVocal.shared.sessionFermee(self)
         supprimerEtat()
-        pagePrete = false; file.removeAll()
+        pagePrete = false; file.removeAll(); tamponRechargement = nil
         fenetre.liberer()
         RegistreSessions.shared.debutFermeture(self)
         RegistreSessions.shared.retirer(self)
@@ -535,8 +704,9 @@ final class Session {
             arreterProcessus(p, termine)
             return
         }
-        toursAvantArret = etat == "travaille" ? 2 : 1
-        journal("session \(sessionId) : fermeture avec bilan (\(id)), tour en cours : \(etat == "travaille"), fenêtre libérée")
+        let occupe = tourEnCours || etat == "travaille"
+        toursAvantArret = occupe ? 2 : 1
+        journal("session \(sessionId) : fermeture avec bilan (\(id)), tour en cours : \(occupe), fenêtre libérée")
         p.ecrire(ligne)
         let t0 = Date()
         func verifier() {
@@ -559,7 +729,12 @@ final class Session {
     // MARK: - État (~/.config/better-terminal/sessions/<id>.json) et notification
 
     private func changerEtat(_ o: [String: Any]) {
-        guard let e = o["etat"] as? String, Validation.etats.contains(e) else { refuser("etat invalide"); return }
+        guard var e = o["etat"] as? String, Validation.etats.contains(e) else { refuser("etat invalide"); return }
+        // une page qui vient de se recharger peut se croire « prête » : Swift sait que Claude travaille encore
+        if e == "pret", tourEnCours, let p = processus, !p.fini, arretVoulu == nil {
+            journal("session \(sessionId) : page « pret » pendant un tour en cours → travaille")
+            e = "travaille"
+        }
         if let r = o["resume"] { resume = (r as? String).map { String($0.prefix(500)) } }
         etat = e; maj = Date()
         ecrireEtat()
@@ -665,7 +840,7 @@ final class Session {
         let cle = "\(e["actif"] ?? "")|\(e["etat"] ?? "")|\(e["enLigne"] ?? "")"
         guard pagePrete, cle != dernierVocalEtat else { return }
         dernierVocalEtat = cle
-        pousser("vocalEtat", e)
+        pousserDirect("vocalEtat", e)
     }
 
     /// Dictée dans la saisie (Espace maintenu) : état et texte pour la page.
