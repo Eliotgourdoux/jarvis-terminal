@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: btmedia:; media-src btmedia:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
 <title>Jarvis — Telegram</title>
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/code.css">
 <link rel="stylesheet" href="css/telegram.css">
+<link rel="stylesheet" href="css/medias.css">
 </head>
 <body class="tg">
 <header class="tg-tete">
@@ -35,7 +36,7 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2"/></svg>
       </button>
     </div>
-    <div class="tg-aide">Entrée pour envoyer · ⇧Entrée pour aller à la ligne · ton message part aussi dans Telegram, précédé de 💻</div>
+    <div class="tg-aide">Entrée pour envoyer · ⇧Entrée pour aller à la ligne · envoyé depuis ton compte Telegram, par Beeper</div>
   </div>
 </footer>
 
@@ -43,6 +44,7 @@
 <script src="vendor/purify-3.4.17.min.js"></script>
 <script src="vendor/highlight-11.12.0.min.js"></script>
 <script src="js/commun.js"></script>
+<script src="js/medias.js"></script>
 <script src="js/markdown.js"></script>
 <script src="js/telegram.js"></script>
 </body>

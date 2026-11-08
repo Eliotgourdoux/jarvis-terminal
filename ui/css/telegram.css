@@ -74,6 +74,10 @@ body.tg { display: flex; flex-direction: column; }
 .tg-eliot.tg-en-cours .bulle { opacity: .7; }
 .tg-eliot.tg-echec .bulle { border-color: var(--rouge); }
 .tg-attente .tg-signal { margin-top: 4px; }
+.tg-eliot.tg-echec .bulle-meta { color: var(--rouge); }
+.tg-reprendre { margin-left: 6px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--bord); background: none;
+  color: var(--texte, inherit); font: inherit; font-size: 12px; cursor: pointer; }
+.tg-reprendre:hover { border-color: var(--accent); }
 
 /* Pied : statut + saisie */
 .tg-pied { flex: none; padding: 10px 0 14px; background: var(--fond); border-top: 1px solid var(--bord); }
