@@ -1,0 +1,3 @@
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Montre-moi l'architecture du service."}]}, "parent_tool_use_id": null}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Et si le cache tombe ?"}]}, "parent_tool_use_id": null}
+{"type": "user", "session_id": "", "message": {"role": "user", "content": [{"type": "text", "text": "Ajoute un second serveur."}]}, "parent_tool_use_id": null}
