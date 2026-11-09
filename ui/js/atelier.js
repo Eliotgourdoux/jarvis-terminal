@@ -393,6 +393,12 @@
           else prochain = Math.min(prochain, COMMANDE_LONGUE - ecoule);
         }
         if (nbTouches > 1) { classes += ' plusieurs'; phrase = 'Fait ' + nbTouches + ' choses à la fois'; }
+        // Un agent tourne en même temps (ou c'est lui qui agit) : son petit double reste à côté, quelle que soit
+        // la pose principale (clavier, sablier, loupe…). Demande d'Eliot, 09/11/2026.
+        if (anim !== 'bebe') {
+          var agentActif = !!touche.it.parent || this.cases.some(function (c) { return c.touche && c.it && (AGENT[c.it.nom] || c.it.nom === 'Workflow'); });
+          if (agentActif) classes += ' avec-bebe';
+        }
       }
       else if (d.reflechit) {
         etat = 'reflechit'; anim = 'pense'; phrase = 'Réfléchit…';

@@ -341,3 +341,10 @@ summary.atelier:hover .chevron, details.activite[open] > summary.atelier .chevro
   .anim-tasse .pr-presse { opacity: 1; transform: translateY(17px); }
   .pr-coche { stroke-dashoffset: 0; }
 }
+
+/* Agent en parallèle d'une autre action : le petit double, un peu plus petit, posé au sol à droite
+ * (hors du clavier, sous le sablier). Il sautille comme dans sa pose à lui. */
+.avec-bebe .p-bebe { display: inline; }
+.avec-bebe .p-bebe { transform: translate(58.5px, 30px) scale(.8) translate(-48px, -27px); }
+.avec-bebe .pr-bebe-g { animation: m-sautille .5s steps(1, end) infinite; }
+@media (prefers-reduced-motion: reduce) { .avec-bebe .pr-bebe-g { animation: none; } }
