@@ -24,6 +24,10 @@
   var PERIODE = 60000;
   var TITRE_MAX = 300;
 
+  // « À toi » plié ou déplié : choix d'Eliot, gardé d'une session et d'un lancement à l'autre.
+  function lireReplie() { try { return localStorage.getItem('bt.todo.toiReplie') === '1'; } catch (_) { return false; } }
+  function ecrireReplie(v) { try { localStorage.setItem('bt.todo.toiReplie', v ? '1' : '0'); } catch (_) {} }
+
   var etat = {
     pret: false, ouvert: false,
     projet: undefined,          // undefined : pas encore lu ; null : aucun projet ; { id, nom, emoji }
@@ -34,7 +38,7 @@
     deplies: Object.create(null),     // titre -> notes dépliées
     plan: null,                       // { taches: [{ texte, statut }] }
     planReplie: false, planSignature: '',
-    toiReplie: false, toiCompteVu: 0,
+    toiReplie: lireReplie(), toiCompteVu: 0,
     travaille: false
   };
   var n = {};   // nœuds du DOM
@@ -432,7 +436,7 @@
     var taches = etat.projet ? etat.taches : [];
     b.hidden = !etat.charge || !taches.length;
     if (b.hidden) { etat.toiCompteVu = taches.length; return; }
-    if (taches.length > etat.toiCompteVu) etat.toiReplie = false;   // nouvelle tâche : on la montre
+    // Plus de dépliage automatique (demande d'Eliot, 09/11/2026 : « relou ») : seul son clic plie ou déplie.
     etat.toiCompteVu = taches.length;
     var ouvertes = taches.filter(function (t) { return !etat.enCochage[t.titre]; });
     n.dToiTete.compte.textContent = String(ouvertes.length);
@@ -472,7 +476,7 @@
     bp.appendChild(n.dPlanListe);
 
     var bt = n.dToi = el('section', 'td-bloc td-toi'); bt.hidden = true;
-    n.dToiTete = teteDock(bt, 'À toi', function () { etat.toiReplie = !etat.toiReplie; rendreToi(); });
+    n.dToiTete = teteDock(bt, 'À toi', function () { etat.toiReplie = !etat.toiReplie; ecrireReplie(etat.toiReplie); rendreToi(); });
     n.dToiListe = el('ul', 'td-liste');
     bt.appendChild(n.dToiListe);
 
@@ -601,7 +605,7 @@
       etat.travaille = avant === 'travaille';
       s.on('etat', function (e) {
         etat.travaille = e === 'travaille';
-        if (avant === 'travaille' && e !== 'travaille') { etat.toiReplie = false; lister(true); }
+        if (avant === 'travaille' && e !== 'travaille') lister(true);
         avant = e;
         rendreDockPlan();
       });
