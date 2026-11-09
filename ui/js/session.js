@@ -16,6 +16,7 @@
  *   'modeles'    (liste)           liste des modèles reçue par initialize
  *   'historique' (nombre)          historique chargé
  *   'vocal'      (etat)            mode vocal « Jarvis » : { actif, etat, enLigne, questionId, raccourci }
+ *   'etatConso'  (etat)            contexte utilisé et quota de l'abonnement (voir etatConso(), ligne-etat.js)
  *
  * Mode vocal (CONTRAT.md, « Mode vocal ») : la Session envoie au pont `vocal` (résumé de fin de tour,
  * question à lire), `vocalAnnule` et `modeVocal` ; elle reçoit `definirVocal` (bt.vocalEtat) et
@@ -30,7 +31,7 @@
  *   question   { type: 'questions'|'permission'|'plan', requestId, toolUseId, outil, entree, questions, plan,
  *                suggestions, description, raison, statut: 'attente'|'repondue'|'annulee', reponseTexte, source }
  *   note       { niveau: 'info'|'avert'|'erreur', texte, detail }
- *   fin        { duree, erreur, interrompu }
+ *   fin        { duree, erreur, interrompu, quota }   quota : { pct, approx: true, cout } = part estimée du quota 5 h
  *   separateur { texte }
  * Tous : { id, date, parent (tool_use_id du sous-agent ou null), historique }
  */
@@ -99,6 +100,9 @@
     this._requetes = Object.create(null);      // request_id -> rappel
     this._compteurReq = 0;
     this.jetons = { entree: 0, sortie: 0, cacheLu: 0, cacheEcrit: 0, cout: 0 };
+    this.contexte = null;        // { jetons, modele } : taille du contexte au dernier appel du fil principal
+    this._derniere = null;       // { pct, cout } : part du quota 5 h prise par le dernier tour (estimée)
+    this._coutProcessus = null;  // total_cost_usd cumulé du processus claude courant (null : inconnu)
     this._stderr = [];
     this._noteRetry = null;
     this._initialise = false;
@@ -159,6 +163,9 @@
       this.debutTravail = null;
       this._definirActivite('');
     }
+    // Coût cumulé du processus (total_cost_usd) : connu (zéro) seulement pour un processus neuf, lancé sans
+    // --resume. Une reprise, une relance ou un ⌘R repartent d'un total qui compte toute la conversation.
+    this._coutProcessus = !this._infoRecue && !info.reprise && !direct ? 0 : null;
     this._infoRecue = true;
     this.info = BT.etendre({}, this.info, info);
     if (info.sessionId) this.sessionId = info.sessionId;
@@ -503,6 +510,7 @@
     var date = histo && d.timestamp ? Date.parse(d.timestamp) : null;
     if (!histo) this._debutTravail();
     if (!parent && m.model && m.model !== '<synthetic>') this.modeleResolu = m.model;
+    if (!parent && m.usage && m.model !== '<synthetic>') this._majContexte(m.usage, m.model, histo);
     for (var i = 0; i < contenu.length; i++) {
       var c = contenu[i] || {};
       var it = null;
@@ -675,8 +683,10 @@
         this._note('erreur', libelles[d.subtype] || 'Le tour s’est terminé sur une erreur.', detail);
       }
     }
+    var cout = this._coutTour(d);
     this._compterJetons(d.usage, d.total_cost_usd);
-    this._ajouter({ genre: 'fin', duree: d.duration_ms, erreur: erreur, interrompu: interrompu });
+    var fin = this._ajouter({ genre: 'fin', duree: d.duration_ms, erreur: erreur, interrompu: interrompu });
+    this._consoTour(fin, cout, d.modelUsage);
     this.travaille = false;
     this.debutTravail = null;
     this._definirActivite('');
@@ -694,6 +704,8 @@
       var quand = r.resetsAt ? ' Reprise vers ' + BT.heure(new Date(r.resetsAt * 1000)) + '.' : '';
       this._note('avert', 'Limite d’usage de l’abonnement atteinte.' + quand);
     }
+    var f = BT.fenetresQuota(r);
+    if (f.cinqH || f.semaine) this._releveQuota(f);
   };
 
   /* ================= Requêtes de contrôle ================= */
@@ -1243,6 +1255,206 @@
     });
   };
 
+  /* ================= Consommation : contexte et quota de l'abonnement ================= */
+
+  /* Le quota de l'abonnement (rate_limit_event) n'est donné qu'au point près, et seulement de temps en temps.
+   * Pour la part prise par UN tour, on passe par son coût en dollars (équivalent API, donné par claude) :
+   *   part du quota 5 h ≈ coût du tour × k,   k = points de quota par dollar.
+   * k se calibre tout seul : à chaque relevé du quota, si l'utilisation a monté depuis le relevé précédent de la
+   * même fenêtre (même resetsAt), on cumule la hausse (en points) et ce qu'ont coûté entre-temps les tours de
+   * toutes les fenêtres de l'app (compteur commun). Les totaux vivent dans localStorage, partagés entre sessions.
+   * Le quota étant celui du compte, une session lancée hors de l'app (Terminal) gonfle k : les relevés aberrants
+   * sont écartés une fois k connu. */
+  var CLE_CALIBRAGE = 'bt.quota.calibrage';
+  var CLE_FENETRES = 'bt.contexte.fenetres';
+  var CALIBRAGE_MIN = 2;    // points de quota cumulés avant toute estimation (3 = trop long à attendre, 09/11/2026)
+  var RELEVE_MAX = 5;       // poids maximal d'un seul relevé, en points
+  var MEMOIRE = 60;         // au-delà, les anciens relevés s'effacent peu à peu (le rapport k est gardé)
+  var ECART_MAX = 4;        // relevé dont le k sort de [k/4, 4k] : écarté (au plus deux fois d'affilée)
+
+  function lireStock(cle) {
+    try { var v = localStorage.getItem(cle); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+  function ecrireStock(cle, v) {
+    try { localStorage.setItem(cle, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ }
+  }
+  function nombre(v) { return typeof v === 'number' && isFinite(v) ? v : 0; }
+
+  function lireCalibrage() {
+    var c = lireStock(CLE_CALIBRAGE);
+    if (!c || typeof c !== 'object') c = {};
+    return {
+      du: nombre(c.du), dc: nombre(c.dc), n: nombre(c.n), cumul: nombre(c.cumul), rejets: nombre(c.rejets),
+      releve: c.releve && typeof c.releve === 'object' ? c.releve : null,
+      dernier: c.dernier && typeof c.dernier === 'object' ? c.dernier : null
+    };
+  }
+  function coefficient(c) { return c.du >= CALIBRAGE_MIN && c.dc > 0 ? c.du / c.dc : null; }
+
+  /* Calibrage courant (lecture seule) : { pret, k (points par dollar), points, releves }. */
+  BT.calibrageQuota = function () {
+    var c = lireCalibrage(), k = coefficient(c);
+    return { pret: !!k, k: k, points: c.du, releves: c.n, min: CALIBRAGE_MIN };
+  };
+
+  /* Part du quota au format français : « 0,42 % », « 1,3 % », « < 0,01 % ». */
+  BT.pctQuota = function (pct) {
+    if (typeof pct !== 'number' || !isFinite(pct)) return '';
+    if (pct > 0 && pct < 0.005) return '< 0,01 %';
+    return pct.toFixed(pct < 1 ? 2 : 1).replace('.', ',') + ' %';
+  };
+
+  /* rate_limit_event → { cinqH: { pct, resetsAt, statut }, semaine: {…} } (pct en points de %, 37 = 37 %). */
+  BT.fenetresQuota = function (r) {
+    r = r || {};
+    var uw = r.unifiedWindows || {}, res = {};
+    function lire(w) {
+      if (!w || typeof w.utilization !== 'number') return null;
+      return { pct: Math.round(w.utilization * 10000) / 100, resetsAt: nombre(w.resetsAt), statut: w.status || '' };
+    }
+    res.cinqH = lire(uw.five_hour) || (r.rateLimitType === 'five_hour' ? lire(r) : null);
+    res.semaine = lire(uw.seven_day) || (r.rateLimitType === 'seven_day' ? lire(r) : null);
+    return res;
+  };
+
+  /* Poids d'un usage en « jetons d'entrée équivalents » : barème Anthropic (lecture du cache 0,1 ; écriture 5 min 1,25 ;
+   * écriture 1 h 2 ; sortie, réflexion comprise, 5). Vérifié sur les journaux : coût = poids × prix d'entrée. */
+  function poidsUsage(u) {
+    if (!u || typeof u !== 'object') return 0;
+    var cc = u.cache_creation || {};
+    var ecrit = typeof cc.ephemeral_1h_input_tokens === 'number' || typeof cc.ephemeral_5m_input_tokens === 'number'
+      ? 2 * nombre(cc.ephemeral_1h_input_tokens) + 1.25 * nombre(cc.ephemeral_5m_input_tokens)
+      : 1.25 * nombre(u.cache_creation_input_tokens);
+    return nombre(u.input_tokens) + 0.1 * nombre(u.cache_read_input_tokens) + ecrit + 5 * nombre(u.output_tokens);
+  }
+  function poidsModele(m) {
+    var h = m.cacheCreationEphemeral1hInputTokens, c = m.cacheCreationEphemeral5mInputTokens;
+    var ecrit = typeof h === 'number' || typeof c === 'number' ? 2 * nombre(h) + 1.25 * nombre(c) : 1.25 * nombre(m.cacheCreationInputTokens);
+    return nombre(m.inputTokens) + 0.1 * nombre(m.cacheReadInputTokens) + ecrit + 5 * nombre(m.outputTokens);
+  }
+
+  /* Coût d'un tour en dollars. total_cost_usd est CUMULÉ sur le processus (vérifié : journal modele.jsonl), et une
+   * reprise (--resume) repart du total de toute la conversation : différence avec le tour précédent quand on la
+   * connaît, sinon estimation = prix moyen du jeton du modèle (modelUsage) × poids de l'usage du tour. */
+  Session.prototype._coutTour = function (d) {
+    var total = typeof d.total_cost_usd === 'number' && isFinite(d.total_cost_usd) ? d.total_cost_usd : null;
+    var avant = this._coutProcessus;
+    if (total !== null) this._coutProcessus = total;
+    if (total !== null && avant !== null && total >= avant) return total - avant;
+    var mu = d.modelUsage && typeof d.modelUsage === 'object' ? d.modelUsage : null;
+    if (!mu) return null;
+    var cout = 0, poids = 0, cible = String(this.modeleResolu || '').replace(/\[1m\]$/i, ''), prix = null;
+    for (var nom in mu) {
+      var m = mu[nom] || {}, p = poidsModele(m);
+      if (!(p > 0) || typeof m.costUSD !== 'number') continue;
+      cout += m.costUSD; poids += p;
+      if (cible && nom.replace(/\[1m\]$/i, '') === cible) prix = m.costUSD / p;
+    }
+    if (prix === null && poids > 0) prix = cout / poids;
+    return prix === null ? null : prix * poidsUsage(d.usage);
+  };
+
+  /* Fin de tour : coût ajouté au compteur commun, part du quota posée sur l'élément « fin ». */
+  Session.prototype._consoTour = function (fin, cout, modelUsage) {
+    this._noterFenetres(modelUsage);
+    if (typeof cout === 'number' && cout > 0) {
+      var c = lireCalibrage();
+      c.cumul += cout;
+      ecrireStock(CLE_CALIBRAGE, c);
+      var k = coefficient(c);
+      this._derniere = { pct: k ? cout * k : null, cout: cout };
+      if (k) {
+        fin.quota = { pct: cout * k, approx: true, cout: cout };
+        this._maj(fin, 'quota');
+      }
+    } else if (cout === 0) {
+      this._derniere = { pct: 0, cout: 0 };   // commande locale (/compact…), rien d'envoyé au modèle
+    }
+    this._emettreConso();
+  };
+
+  /* Relevé du quota (rate_limit_event) : mémorisé pour toutes les fenêtres, et calibrage de k. */
+  Session.prototype._releveQuota = function (f) {
+    var c = lireCalibrage();
+    c.dernier = { cinqH: f.cinqH || null, semaine: f.semaine || null, t: Date.now() };
+    var q = f.cinqH;
+    if (q) {
+      var r0 = c.releve;
+      var memeFenetre = r0 && r0.resetsAt === q.resetsAt && typeof r0.util === 'number' && typeof r0.cumul === 'number';
+      var du = memeFenetre ? q.pct - r0.util : 0;
+      if (memeFenetre && du <= 0 && du > -0.5) {
+        // Pas bougé à l'arrondi près : on garde l'ancien relevé, les coûts continuent de s'accumuler depuis lui.
+      } else {
+        var dc = memeFenetre ? c.cumul - r0.cumul : 0;
+        if (memeFenetre && du > 0 && dc > 1e-6) {
+          var ki = du / dc, k = coefficient(c);
+          if (k && (ki > k * ECART_MAX || ki < k / ECART_MAX) && c.rejets < 2) {
+            c.rejets++;
+          } else {
+            var poids = Math.min(1, RELEVE_MAX / du);
+            c.du += du * poids; c.dc += dc * poids; c.n++; c.rejets = 0;
+            if (c.du > MEMOIRE) { var s = MEMOIRE / c.du; c.du *= s; c.dc *= s; }
+          }
+        }
+        // Hausse sans coût de notre côté (session hors de l'app), nouvelle fenêtre ou baisse : on repart de là.
+        c.releve = { resetsAt: q.resetsAt, util: q.pct, cumul: c.cumul, t: Date.now() };
+      }
+    }
+    ecrireStock(CLE_CALIBRAGE, c);
+    this._emettreConso();
+  };
+
+  /* Taille du contexte : entrée + cache lu + cache écrit du DERNIER appel du fil principal (pas le cumul). */
+  Session.prototype._majContexte = function (u, modele, histo) {
+    var n = nombre(u.input_tokens) + nombre(u.cache_read_input_tokens) + nombre(u.cache_creation_input_tokens);
+    if (!n) return;
+    var avant = this.contexte;
+    this.contexte = { jetons: n, modele: modele || this.modeleResolu || '' };
+    if (!histo && (!avant || avant.jetons !== n || avant.modele !== this.contexte.modele)) this._emettreConso();
+  };
+
+  /* Fenêtres de contexte données par modelUsage (result), gardées pour la réouverture des sessions. */
+  Session.prototype._noterFenetres = function (mu) {
+    if (!mu || typeof mu !== 'object') return;
+    var f = this._fenetres || (this._fenetres = lireStock(CLE_FENETRES) || {}), change = false;
+    for (var nom in mu) {
+      var w = mu[nom] && mu[nom].contextWindow;
+      if (typeof w === 'number' && w > 0 && f[nom] !== w) { f[nom] = w; change = true; }
+    }
+    if (change) ecrireStock(CLE_FENETRES, f);
+  };
+
+  Session.prototype._fenetreContexte = function (modele) {
+    var f = this._fenetres || (this._fenetres = lireStock(CLE_FENETRES) || {});
+    var m = String(modele || ''), base = m.replace(/\[1m\]$/i, ''), w = f[m] || f[base] || 0;
+    if (!w && base) for (var nom in f) if (nom.replace(/\[1m\]$/i, '') === base) { w = f[nom]; break; }
+    if (!w) w = /\[1m\]/i.test(m + ' ' + (this.modele || '')) ? 1000000 : 200000;
+    return w;
+  };
+
+  /* État affiché par la ligne d'état. Le quota vient du dernier relevé de n'importe quelle fenêtre de l'app
+   * (c'est celui du compte) ; une fenêtre de quota dont l'heure de remise à zéro est passée n'est plus montrée. */
+  Session.prototype.etatConso = function () {
+    var c = lireCalibrage(), k = coefficient(c), ctx = null, quota = null;
+    if (this.contexte) {
+      var w = this._fenetreContexte(this.contexte.modele);
+      if (this.contexte.jetons > w && w < 1000000) w = 1000000;   // contexte plus grand que la fenêtre supposée : 1 M
+      ctx = { jetons: this.contexte.jetons, fenetre: w, pct: this.contexte.jetons / w * 100, modele: this.contexte.modele };
+    }
+    if (c.dernier) {
+      var maintenant = Date.now() / 1000;
+      var vivant = function (q) { return q && typeof q.pct === 'number' && (!q.resetsAt || q.resetsAt > maintenant) ? q : null; };
+      var q5 = vivant(c.dernier.cinqH), q7 = vivant(c.dernier.semaine);
+      if (q5 || q7) quota = { cinqH: q5, semaine: q7, date: c.dernier.t || null };
+    }
+    return {
+      contexte: ctx, quota: quota, derniere: this._derniere,
+      calibrage: { pret: !!k, k: k, points: c.du, releves: c.n, min: CALIBRAGE_MIN }
+    };
+  };
+
+  Session.prototype._emettreConso = function () { this.emit('etatConso', this.etatConso()); };
+
   /* Cumul des jetons de la session. `u` = usage d'un tour (result) ou d'un appel (historique). */
   Session.prototype._compterJetons = function (u, cout) {
     if (!u || typeof u !== 'object') return;
@@ -1332,6 +1544,9 @@
     this.jetons = { entree: 0, sortie: 0, cacheLu: 0, cacheEcrit: 0, cout: 0 };
     for (var id in usages) this._compterJetons(usages[id]);
     sansId.forEach(function (u) { self._compterJetons(u); });
+    // Page rechargée sur une conversation déjà commencée : le total cumulé du processus est inconnu.
+    if (n) this._coutProcessus = null;
+    this._emettreConso();
     if (n) this._ajouter({ genre: 'separateur', texte: this._repriseTour ? 'Page rechargée, Claude continue' : 'Reprise de la session', historique: true });
     this.emit('historique', n);
     // Questions et permissions encore en attente dans le processus (⌘R), après l'historique pour retrouver leur outil.
