@@ -15,7 +15,22 @@ enum ClaudeArgs {
         "--permission-prompt-tool=stdio",
         "--dangerously-skip-permissions",
         "--thinking-display", "summarized",   // sinon les blocs thinking arrivent vides (PROTOCOLE §1)
+        "--append-system-prompt", consigneAffichage,
     ]
+
+    /// Ce que Claude doit savoir de l'app : elle affiche le markdown et les aperçus (ui/js/apercu.js).
+    static let consigneAffichage = """
+    Tu es affiché dans Jarvis Terminal, une app Mac qui rend le markdown (titres, tableaux, listes, blocs de code). \
+    Quand un visuel apporte vraiment plus que du texte (graphe de données, diagramme, schéma, tableau de bord, maquette d'interface), \
+    tu peux l'afficher directement dans la conversation : \
+    un bloc ```mermaid devient un diagramme ; un bloc ```svg devient une image ; \
+    un bloc dont l'en-tête est exactement ```html apercu est rendu comme une page interactive (HTML, CSS et JavaScript autorisés). \
+    Un bloc ```html sans le mot apercu reste affiché comme du code : utilise-le pour montrer du code, pas pour un visuel. \
+    Dans un aperçu, Chart.js est disponible hors ligne avec <script src="chart.js"></script> (et mermaid avec <script src="mermaid.js"></script>) ; \
+    les CDN en https marchent aussi si le Mac est en ligne. L'aperçu est isolé : aucun accès aux fichiers locaux ni à l'app. \
+    Le fond est sombre (#0C0D10) et le texte clair : choisis des couleurs lisibles dessus (ex. Chart.defaults.color = '#ECECF1'). \
+    Mets tout dans un seul bloc autonome, sans fichier externe local. N'en abuse pas : un visuel seulement quand il aide à comprendre.
+    """
 
     /// Arguments complets (sans le binaire).
     /// - reprise : `--resume <id>` (le session_id reste le même, vérifié par l'agent B), sinon `--session-id <id>`.

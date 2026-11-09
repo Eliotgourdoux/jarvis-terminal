@@ -84,6 +84,7 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(RelaisMessages(self), name: "bt")
         Medias.installer(dans: cfg)   // images, vidéos et sons locaux cités dans le fil (btmedia://, Medias.swift)
+        Apercu.installer(dans: cfg)   // aperçus html / svg / mermaid du fil (btapercu://, Apercu.swift)
         // Tests d'intégration seulement (BT_DEV_PILOTE posé au lancement) : voir PiloteDev.swift.
         if let js = PiloteDev.scriptInjecte() {
             cfg.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -220,6 +221,7 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
         let principal = action.targetFrame?.isMainFrame ?? true
         if let u, u.isFileURL, u.standardizedFileURL.path == page.standardizedFileURL.path { decisionHandler(.allow); return }
         if !principal, let u, u.scheme == "about" { decisionHandler(.allow); return }
+        if !principal, let u, u.scheme == Apercu.schema, u.host == "app", u.path == "/apercu.html" { decisionHandler(.allow); return }
         if action.navigationType == .linkActivated, let u, ["http", "https"].contains(u.scheme?.lowercased() ?? "") {
             NSWorkspace.shared.open(u)   // un lien cliqué s'ouvre dans le navigateur, jamais dans la vue
         } else {

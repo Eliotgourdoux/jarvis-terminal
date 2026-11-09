@@ -47,6 +47,10 @@
     var trop = lignes.length > maxLignes + 4;
     var bloc = BT.blocCode(trop ? lignes.slice(0, maxLignes).join('\n') : code, lang, { titre: titre });
     bloc.codeComplet = code;
+    if (BT.equiperApercu) {
+      var ext = /\.(html?|svg|mmd)$/i.exec(titre || '');
+      BT.equiperApercu(bloc, code, ext ? ext[1] : lang, false);
+    }   // fichier .html écrit par Claude : onglet Aperçu
     if (!trop) return bloc;
     var b = BT.bouton('bt-plus', 'Afficher les ' + lignes.length + ' lignes', function () {
       var c = bloc.querySelector('code');

@@ -3,7 +3,8 @@
  * (blocs de code avec bouton Copier, coloration highlight.js, tableaux défilants,
  * images remplacées par des liens, ligne ✅ mise en valeur). Un lien ou une image markdown
  * vers un média local garde son chemin dans data-media : js/medias.js en fait un lecteur.
- * Le HTML brut écrit par Claude est affiché comme du texte (jamais interprété). */
+ * Le HTML brut écrit par Claude est affiché comme du texte (jamais interprété) ; les blocs ```html, ```svg et
+ * ```mermaid ont un aperçu isolé (js/apercu.js), créé seulement une fois le message complet. */
 (function () {
   'use strict';
   var BT = window.BT = window.BT || {};
@@ -31,6 +32,12 @@
       renderer: {
         // HTML brut : affiché tel quel, comme dans le terminal.
         html: function (tok) { return echapper(tok.text || tok.raw || ''); }
+      },
+      // « ```html apercu » (ou aperçu, preview) : Claude demande l'aperçu d'office (js/apercu.js).
+      walkTokens: function (t) {
+        if (t.type !== 'code' || !t.lang) return;
+        var m = /^(\S+)\s+.*\b(apercu|aperçu|preview|rendu|render)\b/i.exec(t.lang);
+        if (m) t.lang = m[1] + '-apercu';
       }
     });
 
@@ -132,11 +139,11 @@
     }
     var html = window.marked.parse(String(md || ''));
     frag = window.DOMPurify.sanitize(html, CONFIG_PURIFY);
-    retoucher(frag, opts.enCours && fenceOuverte(md));
+    retoucher(frag, opts.enCours && fenceOuverte(md), !!opts.enCours);
     return frag;
   };
 
-  function retoucher(frag, dernierOuvert) {
+  function retoucher(frag, dernierOuvert, enCours) {
     // Blocs de code
     var pres = frag.querySelectorAll('pre');
     for (var i = 0; i < pres.length; i++) {
@@ -145,6 +152,8 @@
       if (!code) { code = document.createElement('code'); code.textContent = pre.textContent; pre.textContent = ''; pre.appendChild(code); }
       var m = /(?:^|\s)language-([\w+#.-]+)/.exec(code.className || '');
       var lang = m ? m[1] : '';
+      var demande = /-apercu$/.test(lang);
+      if (demande) lang = lang.replace(/-apercu$/, '');
       code.textContent = code.textContent.replace(/\n$/, '');
       var bloc = BT.blocCode('', lang, { colorer: false });
       var nouveauCode = bloc.querySelector('code');
@@ -153,6 +162,7 @@
       var ouvert = dernierOuvert && i === pres.length - 1;
       if (lang && !ouvert) BT.colorerCode(nouveauCode, lang);
       if (ouvert) bloc.classList.add('en-cours');
+      else if (!enCours && BT.equiperApercu) BT.equiperApercu(bloc, nouveauCode.textContent, lang, demande);
     }
     // Tableaux : conteneur défilant horizontalement
     var tables = frag.querySelectorAll('table');
