@@ -58,6 +58,9 @@ final class DicteeDirecte {
         echouerFrais()
         arretDiffere?.cancel(); arretDiffere = nil
         demarrerServeur()
+        // Le serveur du texte final (large-v3-turbo) se charge pendant qu'Eliot parle : au relâchement, il est prêt
+        // (18/11/2026, « aussi smooth que dans le terminal » : plus de 1 à 2 s de chargement de whisper-cli).
+        ServeurFinal.shared.prechauffer()
         minuteur?.invalidate()
         minuteur = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in DicteeDirecte.shared.tic() }
     }
