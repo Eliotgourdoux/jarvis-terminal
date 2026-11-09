@@ -20,6 +20,7 @@
     var self = this;
     session.on('ajout', function (it) { self.ajouter(it); });
     session.on('maj', function (it) { self.salir(it); });
+    session.on('coupe', function (it, retires) { self.couper(it, retires); });
     // Mode vocal : les questions ouvertes disent si Jarvis les lit ou écoute la réponse.
     session.on('vocal', function () { session.questionsEnAttente().forEach(function (q) { self.salir(q); }); });
     // Détail des outils construit à la première ouverture seulement (léger pour les longues sessions).
@@ -92,6 +93,26 @@
   function entree(it) { return !it.historique && !document.hidden; }
 
   VueFil.prototype.noeud = function (id) { return this.noeuds[id] || null; };
+
+  /* Reprise depuis un message : le nœud de ce message d'Eliot et tout ce qui le suit dans le fil disparaissent. */
+  VueFil.prototype.couper = function (it, retires) {
+    var self = this, n = this.noeuds[it.id];
+    if (n && n.parentNode === this.racine) {
+      while (n) { var suivant = n.nextSibling; this.racine.removeChild(n); n = suivant; }
+    }
+    (retires || []).forEach(function (x) { delete self.noeuds[x.id]; self.sales.delete(x.id); });
+    this.eliots = this.eliots.filter(function (e) { return e.isConnected; });
+    this._fermerTour();
+    this.emit('rendu');
+  };
+
+  /* Pendant qu'Eliot prépare une reprise : ce qui sera oublié est estompé (annulable). */
+  VueFil.prototype.marquerReprise = function (it) {
+    this.racine.querySelectorAll('.a-oublier').forEach(function (x) { x.classList.remove('a-oublier'); });
+    var n = it && this.noeuds[it.id];
+    if (!n || n.parentNode !== this.racine) return;
+    for (; n; n = n.nextElementSibling) n.classList.add('a-oublier');
+  };
 
   VueFil.prototype._assurerTour = function (it) {
     if (this.tour) return;
@@ -172,7 +193,7 @@
       });
       l.push(copier);
     }
-    l.push(action('modifier', 'Modifier', function () { if (ui()) ui().reprendreTexte(it.texte); }));
+    l.push(action('modifier', 'Modifier et repartir d’ici', function () { if (ui()) ui().modifierDepuis(it); }));
     var joints = (it.images && it.images.length) || (it.fichiers && it.fichiers.length);
     if (!joints && !it.commande) l.push(action('renvoyer', 'Renvoyer', function () { if (ui()) ui().renvoyerTexte(it.texte); }));
     return el('div', 'eliot-actions', l);

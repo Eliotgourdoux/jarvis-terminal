@@ -765,3 +765,20 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 
 /* Dictée en direct : le texte provisoire reste un peu estompé jusqu'à la transcription finale. */
 textarea.dictee-provisoire { color: var(--dim); }
+
+/* ---- Reprise depuis un message (Modifier) : bande dans la saisie, fil estompé après le point de reprise ---- */
+.saisie-reprise {
+  display: flex; align-items: center; gap: 12px; margin: -2px 0 8px; padding: 7px 8px 7px 12px;
+  border-radius: 7px; background: var(--surface-3); border-left: 3px solid var(--accent);
+  font: 12.5px/1.4 var(--police); color: var(--dim);
+}
+.saisie-reprise[hidden] { display: none; }
+.saisie-reprise b { color: var(--texte); font-weight: 600; }
+.saisie-reprise-texte { flex: 1; min-width: 0; }
+.saisie-reprise.erreur { border-left-color: var(--rouge-texte); color: var(--rouge-texte); }
+.saisie-reprise-annuler {
+  flex: none; height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--bord);
+  background: var(--surface-2); color: var(--texte); font: 500 12.5px var(--police); cursor: pointer;
+}
+.saisie-reprise-annuler:hover { background: var(--surface); }
+.fil > .a-oublier { opacity: .35; transition: opacity .15s ease-out; }

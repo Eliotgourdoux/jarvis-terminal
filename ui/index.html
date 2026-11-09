@@ -60,6 +60,10 @@
   <button type="button" id="pastille-bas" class="pastille-bas" hidden><span class="fleche bas"></span><span class="pastille-texte">Revenir en bas</span></button>
   <div id="banniere" class="banniere" hidden role="alert"></div>
   <div class="saisie">
+    <div id="saisie-reprise" class="saisie-reprise" hidden role="status">
+      <span class="saisie-reprise-texte"><b>Tu repars de ce message.</b> À l’envoi, Claude oublie ce message et tout ce qui suit. Les fichiers déjà modifiés restent tels quels.</span>
+      <button type="button" id="bt-reprise-annuler" class="saisie-reprise-annuler" title="Annuler (Échap)">Annuler</button>
+    </div>
     <div id="saisie-pieces" class="saisie-pieces" hidden></div>
     <textarea id="saisie-texte" rows="1" placeholder="Écris à Claude…" spellcheck="true" aria-label="Message pour Claude"></textarea>
     <div class="saisie-bas">

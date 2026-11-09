@@ -236,6 +236,7 @@
       envoyer.disabled = !ta.value.trim() && !self.pieces.length;
     }
     this.ajusterSaisie = ajuster;
+    $('bt-reprise-annuler').addEventListener('click', function () { if (!self._repriseEnCours) { self.annulerReprise(); ta.focus(); } });
     this._initPieces();
     this._initCommandes();   // avant le gestionnaire d'Entrée : le menu « / » passe en premier
     if (this._initDictee) this._initDictee();   // Espace maintenu : dictée (js/dictee.js)
@@ -548,6 +549,55 @@
     this.ajusterSaisie();
   };
 
+  /* « Modifier » sur un message d'Eliot : le texte revient dans la saisie et, à l'envoi, Claude oublie ce message
+   * et tout ce qui suit (rewind_conversation), puis reçoit la nouvelle version. Une sorte de fork. Échap annule.
+   * Sans identifiant (vieux message, session dans le terminal) : on reprend seulement le texte, comme avant. */
+  Interface.prototype.modifierDepuis = function (it) {
+    if (!this.s.peutReprendre(it)) { this.reprendreTexte(it.texte); return; }
+    if (!this._reprise) this._brouillonAvantReprise = this.ta.value;
+    this._reprise = it;
+    var bande = $('saisie-reprise');
+    bande.hidden = false;
+    bande.classList.remove('erreur');
+    bande.querySelector('.saisie-reprise-texte').innerHTML = '<b>Tu repars de ce message.</b> À l’envoi, Claude oublie ce message et tout ce qui suit. Les fichiers déjà modifiés restent tels quels.';
+    if (this.app.vue) this.app.vue.marquerReprise(it);
+    this.reprendreTexte(it.texte);
+  };
+
+  Interface.prototype.annulerReprise = function (garderTexte) {
+    if (!this._reprise) return;
+    this._reprise = null;
+    $('saisie-reprise').hidden = true;
+    if (this.app.vue) this.app.vue.marquerReprise(null);
+    if (!garderTexte) {
+      this.ta.value = this._brouillonAvantReprise || '';
+      this._histoPos = -1;
+      this.ajusterSaisie();
+    }
+    this._brouillonAvantReprise = '';
+  };
+
+  /* Envoi en mode reprise : d'abord la coupure, puis l'envoi normal du texte (et des pièces jointes). */
+  Interface.prototype._envoyerReprise = function () {
+    var self = this, it = this._reprise, bande = $('saisie-reprise');
+    if (this._repriseEnCours) return;
+    this._repriseEnCours = true;
+    bande.querySelector('.saisie-reprise-texte').textContent = 'Retour en arrière…';
+    this.s.reprendreDepuis(it, function (ok, raison) {
+      self._repriseEnCours = false;
+      if (!ok) {
+        bande.classList.add('erreur');
+        bande.querySelector('.saisie-reprise-texte').textContent = 'Retour en arrière impossible : ' + raison;
+        return;
+      }
+      self._reprise = null;
+      bande.hidden = true;
+      self._brouillonAvantReprise = '';
+      self.envoyer();
+      if (self.app.defilement) self.app.defilement.allerEnBas();
+    });
+  };
+
   /* « Renvoyer » : le même texte repart tel quel, sans toucher au brouillon. */
   Interface.prototype.renvoyerTexte = function (texte) {
     if (this.ta.disabled || !texte.trim()) return;
@@ -559,6 +609,7 @@
     var texte = this.ta.value;
     var pieces = this.pieces || [];
     if (!texte.trim() && !pieces.length) return;
+    if (this._reprise) { this._envoyerReprise(); return; }
     var s = this.s, q = s.questionsEnAttente()[0];
     if (pieces.length) {
       // Avec des pièces jointes : toujours un message normal (une réponse de question n'en transporte pas).
@@ -696,6 +747,7 @@
 
       if (e.key === 'Escape') {
         if (!$('mes-messages').hidden) { self.fermerMesMessages(); e.preventDefault(); return; }
+        if (self._reprise && !self._repriseEnCours) { self.annulerReprise(); e.preventDefault(); return; }
         if (app.recherche.ouverte) { app.recherche.fermer(); e.preventDefault(); return; }
         if (s.etat === 'travaille' && (!dansChamp || cible === self.ta)) { s.interrompre(); e.preventDefault(); }
         return;

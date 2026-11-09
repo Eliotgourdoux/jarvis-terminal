@@ -585,7 +585,7 @@
       var args = /<command-args>([\s\S]*?)<\/command-args>/.exec(texte);
       var ligne = cmd[1].trim() + (args && args[1].trim() ? ' ' + args[1].trim() : '');
       if (/^\/compact$/.test(cmd[1].trim())) return;   // la compaction a son propre élément (compact_boundary)
-      this._ajouter({ genre: 'eliot', texte: ligne, commande: true, historique: true, date: date });
+      this._ajouter({ genre: 'eliot', texte: ligne, commande: true, historique: true, date: date, uuid: d.uuid || null });
       return;
     }
     var sortie = /<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/.exec(texte);
@@ -597,7 +597,7 @@
     }
     if (/^\s*<(local-command-caveat|system-reminder|bash-input|bash-stdout|bash-stderr|task-notification|user-prompt-submit-hook)/.test(texte)) return;
     var fj = BT.extraireFichiers(texte);
-    this._ajouter({ genre: 'eliot', texte: fj.texte, images: images.length ? images : null, fichiers: fj.fichiers, historique: true, date: date });
+    this._ajouter({ genre: 'eliot', texte: fj.texte, images: images.length ? images : null, fichiers: fj.fichiers, historique: true, date: date, uuid: d.uuid || null });
   };
 
   /* Fichiers joints : leurs chemins partent dans le texte, dans un bloc que Claude lit (outil Read)
@@ -1101,9 +1101,66 @@
     var envoi = texte.trim();
     if (fichiers.length) envoi = (envoi ? envoi + '\n\n' : '') + BT.blocFichiers(fichiers);
     if (envoi) contenu.push({ type: 'text', text: envoi });
-    this._ecrire({ type: 'user', session_id: '', message: { role: 'user', content: contenu }, parent_tool_use_id: null });
+    var uuid = BT.uuid();
+    if (it) it.uuid = uuid;
+    this._ecrire({ type: 'user', uuid: uuid, session_id: '', message: { role: 'user', content: contenu }, parent_tool_use_id: null });
     this._debutTravail();
     return it;
+  };
+
+  /* ================= Reprendre depuis un message (rewind_conversation) =================
+   * Claude oublie ce message d'Eliot et tout ce qui suit ; la coupure est enregistrée tout de suite dans le
+   * transcript (une reprise plus tard voit la même chose). Les fichiers modifiés ne sont pas restaurés.
+   * Testé sur Claude Code 2.1.319 (09/11/2026) : réponse « success » même en cas de refus, il faut lire `rewound`. */
+  var RAISONS_REPRISE = {
+    turn_running: 'Claude travaille encore.',
+    stale_target: 'La conversation a changé entre-temps.',
+    unseen_later_turn: 'Un message plus récent n’est pas encore connu de l’app.',
+    target_not_found: 'Ce message n’est plus dans la mémoire de Claude.',
+    target_splits_tool_call: 'Ce message coupe une action en cours.',
+    persist_failed: 'La coupure n’a pas pu être enregistrée.',
+    state_changed: 'La conversation a changé entre-temps.',
+    expired: 'Délai dépassé.'
+  };
+  Session.prototype.peutReprendre = function (it) {
+    return !!(it && it.genre === 'eliot' && it.uuid && !this.termine && !this.dansTerminal && this.items.indexOf(it) >= 0);
+  };
+  Session.prototype.reprendreDepuis = function (it, rappel) {
+    var self = this;
+    rappel = rappel || function () {};
+    if (!this.peutReprendre(it)) { rappel(false, 'Ce message ne peut pas servir de point de reprise.'); return; }
+    var dernier = null;
+    for (var i = this.items.length - 1; i >= 0; i--) if (this.items[i].genre === 'eliot' && this.items[i].uuid) { dernier = this.items[i]; break; }
+    var req = { subtype: 'rewind_conversation', target_message_uuid: it.uuid, interrupt_if_running: true };
+    if (dernier) req.last_seen_user_message_uuid = dernier.uuid;
+    this.requete(req, function (ok, rep, err) {
+      if (!ok || !rep || rep.rewound !== true) {
+        var raison = (rep && (RAISONS_REPRISE[rep.reason] || rep.error)) || err || 'Refus de Claude Code.';
+        rappel(false, raison);
+        return;
+      }
+      self._couperDepuis(it);
+      rappel(true, rep.prefillText || '');
+    });
+  };
+  /* Retire du fil ce message et tout ce qui suit ; un tour interrompu par la reprise n'enverra pas de `result`. */
+  Session.prototype._couperDepuis = function (it) {
+    var idx = this.items.indexOf(it);
+    if (idx < 0) return;
+    var retires = this.items.splice(idx), self = this;
+    retires.forEach(function (x) {
+      delete self._parId[x.id];
+      for (var k in self._outils) if (self._outils[k] === x) delete self._outils[k];
+      for (var q in self._questions) if (self._questions[q] === x) delete self._questions[q];
+      if (self._compactItem === x) self._compactItem = null;
+    });
+    for (var q2 in this._questions) if (this._questions[q2].statut === 'attente' && this.items.indexOf(this._questions[q2]) < 0) delete this._questions[q2];
+    this._interrompu = false;
+    this.travaille = false;
+    this.debutTravail = null;
+    this._definirActivite('');
+    this.emit('coupe', it, retires);
+    this._calculerEtat();
   };
 
   Session.prototype.interrompre = function () {
@@ -1209,17 +1266,41 @@
 
   /* ================= Historique (transcript ~/.claude/projects/…/<id>.jsonl) ================= */
 
+  /* Après une reprise (rewind_conversation), le transcript garde la branche abandonnée : claude écrit une ligne
+   * { type: 'last-prompt', rewound: true, cutUuid } et repart du dernier message gardé. On masque le message
+   * coupé et tout ce qui descend de lui (parentUuid), rien d'autre. Null s'il n'y a eu aucune reprise. */
+  BT.branchesAbandonnees = function (objs) {
+    var coupes = [], enfants = Object.create(null);
+    objs.forEach(function (d) {
+      if (!d || typeof d !== 'object') return;
+      if (d.rewound === true && typeof d.cutUuid === 'string') coupes.push(d.cutUuid);
+      var p = d.parentUuid || d.logicalParentUuid;
+      if (d.uuid && p) (enfants[p] = enfants[p] || []).push(d.uuid);
+    });
+    if (!coupes.length) return null;
+    var morts = Object.create(null), pile = coupes.slice();
+    while (pile.length) {
+      var u = pile.pop();
+      if (morts[u]) continue;
+      morts[u] = true;
+      (enfants[u] || []).forEach(function (c) { pile.push(c); });
+    }
+    return morts;
+  };
+
   Session.prototype.chargerHistorique = function (lignes) {
     if (typeof lignes === 'string') lignes = lignes.split('\n');
     if (!Array.isArray(lignes)) return;
     var n = 0, self = this, usages = Object.create(null), sansId = [], dernierMsg = null;
-    lignes.forEach(function (l) {
-      var d = l;
-      if (typeof l === 'string') {
-        if (!l.trim()) return;
-        try { d = JSON.parse(l); } catch (e) { return; }
-      }
+    lignes = lignes.map(function (l) {
+      if (typeof l !== 'string') return l;
+      if (!l.trim()) return null;
+      try { return JSON.parse(l); } catch (e) { return null; }
+    });
+    var morts = BT.branchesAbandonnees(lignes);
+    lignes.forEach(function (d) {
       if (!d || typeof d !== 'object') return;
+      if (morts && d.uuid && morts[d.uuid]) return;   // branche abandonnée par une reprise (rewind)
       // Jetons : sous-agents compris (ils consomment aussi). Un même message est répété par bloc de contenu.
       if (d.type === 'assistant' && d.message && d.message.usage) {
         if (d.message.id) usages[d.message.id] = d.message.usage; else sansId.push(d.message.usage);
