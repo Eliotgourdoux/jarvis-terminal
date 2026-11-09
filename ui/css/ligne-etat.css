@@ -1,0 +1,26 @@
+/* Ligne d'état, dernière ligne du pied (ligne-etat.js) : petite, atténuée, sur le fond plein du pied.
+ * Pas de cadre ni de pastille : du texte seul, coloré seulement quand un seuil est franchi. */
+#ligne-etat {
+  width: min(var(--largeur), 100%); box-sizing: border-box;
+  display: flex; align-items: baseline; gap: 6px;
+  margin: -3px 0 -6px; padding: 0 6px;
+  font: 500 11.5px/16px var(--police); color: var(--faint);
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden;
+  cursor: default; user-select: none; -webkit-user-select: none;
+}
+#ligne-etat .le-espace { flex: 1 1 auto; min-width: 12px; }
+#ligne-etat .le-droite {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  display: inline-flex; align-items: baseline; gap: 6px;
+}
+#ligne-etat .le-morceau { flex: none; }
+#ligne-etat .le-derniere { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ligne-etat .le-sep { flex: none; color: var(--bord-fort); }
+#ligne-etat .niveau-haut { color: var(--ambre); }
+#ligne-etat .niveau-critique { color: var(--rouge); }
+
+/* Fenêtre étroite : la part de la dernière réponse passe en premier à la trappe. */
+@media (max-width: 520px) {
+  #ligne-etat .le-derniere, #ligne-etat .le-derniere + .le-sep { display: none; }
+}

@@ -17,6 +17,8 @@
     this.sales = new Set();
     this._raf = 0;
     this.eliots = [];
+    this.ecritures = new Set();   // blocs de texte en train de s'écrire (animation lissée + curseur)
+    this._rafEcr = 0;
     var self = this;
     session.on('ajout', function (it) { self.ajouter(it); });
     session.on('maj', function (it) { self.salir(it); });
@@ -81,6 +83,8 @@
         this.groupe = null;
         n = el('div', 'bloc-texte md');
         this.tour.corps.appendChild(n);
+        // Réponse en direct : le texte s'écrit progressivement (pas l'historique, déjà tout là).
+        if (!it.historique && it.enCours && !mouvementReduit()) n._ecr = { src: '', aff: 0, k: -1, debit: 0, recu: 0, t: 0 };
     }
     n.dataset.id = it.id;
     this.noeuds[it.id] = n;
@@ -123,6 +127,7 @@
     carte.appendChild(corps);
     this.racine.appendChild(carte);
     this.tour = { carte: carte, corps: corps };
+    this.emit('tour', carte, it);   // js/defilement.js : un tour lancé sans message d'Eliot monte en haut
   };
 
   VueFil.prototype._assurerGroupe = function (it) {
@@ -316,9 +321,16 @@
     n.hidden = false;
     n.classList.toggle('est-erreur', !!it.erreur);
     n.classList.toggle('en-cours', !!it.enCours);
+    if (n._ecr) {
+      // Interruption, erreur, fenêtre cachée ou mouvement réduit : tout le texte d'un coup.
+      if (it.interrompu || it.erreur || document.hidden || mouvementReduit()) this._finirEcriture(n);
+      else { this._cibleEcriture(n, src); return; }
+    }
     if (n._src === src && n._enCours === !!it.enCours && n._interrompu === !!it.interrompu) return;
     n._src = src; n._enCours = !!it.enCours; n._interrompu = !!it.interrompu;
     var frag = BT.rendreMarkdown(src, { enCours: it.enCours });
+    // Écriture en direct sans animation (mouvement réduit) : un curseur fixe tant que le bloc s'écrit.
+    if (it.enCours && !it.historique) ajouterCurseur(frag);
     // Texte coupé net : des points de suspension suffisent (la note « Interrompu par Eliot » et la fin du tour le disent déjà).
     if (it.interrompu) {
       var dernier = frag.lastElementChild;
@@ -330,6 +342,103 @@
       if (lec) frag.appendChild(lec);
     }
     n.replaceChildren(frag);
+  };
+
+  /* ---------- Écriture progressive de la réponse ----------
+   * Les deltas arrivent par paquets irréguliers ; le texte affiché les rattrape en douceur (vitesse
+   * proportionnelle au retard, temps de réponse ≈ TAU), avec un curseur au bout. Le retard ne dépasse
+   * jamais ~1 s de texte : au-delà, on saute directement. L'historique ne passe jamais par ici. */
+  var TAU = 0.28, TAU_FIN = 0.12;  // s : constante de rattrapage (pendant le flux / une fois le bloc complet)
+  var VITESSE_MIN = 45;           // caractères par seconde, pour finir les derniers caractères
+  var RETARD_MAX_S = 1;           // s de texte en retard au plus
+
+  function mouvementReduit() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  /* Curseur à la fin du dernier texte visible du fragment (pas dans un bouton « Copier »). */
+  function ajouterCurseur(frag) {
+    var curseur = el('span', 'curseur-ecriture');
+    curseur.setAttribute('aria-hidden', 'true');
+    var w = document.createTreeWalker(frag, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (t) {
+        if (!t.nodeValue.trim()) return NodeFilter.FILTER_SKIP;
+        var p = t.parentNode;
+        return p && p.closest && p.closest('button, .bloc-code-tete') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var dernier = null, t;
+    while ((t = w.nextNode())) dernier = t;
+    if (dernier) dernier.parentNode.insertBefore(curseur, dernier.nextSibling);
+    else frag.appendChild(curseur);
+  }
+
+  /* Nouveau texte reçu pour un bloc qui s'écrit : met à jour la cible et le débit estimé. */
+  VueFil.prototype._cibleEcriture = function (n, src) {
+    var e = n._ecr, maintenant = performance.now();
+    if (src !== e.src) {
+      // Texte remplacé (message complet arrivé après un ⌘R…) : on repart du préfixe commun.
+      if (src.lastIndexOf(e.src.slice(0, Math.floor(e.aff)), 0) !== 0) {
+        var k = 0, lim = Math.min(src.length, Math.floor(e.aff));
+        while (k < lim && src.charCodeAt(k) === e.src.charCodeAt(k)) k++;
+        e.aff = k; e.k = -1;
+      }
+      var ajout = src.length - e.src.length;
+      if (ajout > 0) {
+        var dt = e.recu ? Math.min(1, Math.max(0.016, (maintenant - e.recu) / 1000)) : 0.25;
+        e.debit = e.debit ? e.debit * 0.8 + (ajout / dt) * 0.2 : ajout / dt;
+        e.recu = maintenant;
+      }
+      e.src = src;
+    }
+    this.ecritures.add(n);
+    this._planifierEcriture();
+  };
+
+  VueFil.prototype._planifierEcriture = function () {
+    if (this._rafEcr) return;
+    var self = this;
+    if (document.hidden) { setTimeout(function () { self._ecrire(); }, 0); this._rafEcr = -1; return; }
+    this._rafEcr = requestAnimationFrame(function () { self._ecrire(); });
+  };
+
+  /* Une image : chaque bloc avance vers son texte reçu. */
+  VueFil.prototype._ecrire = function () {
+    this._rafEcr = 0;
+    var self = this, maintenant = performance.now(), rendu = false, actif = false;
+    this.ecritures.forEach(function (n) {
+      var e = n._ecr, it = n.dataset.id && self.s.item(n.dataset.id);
+      if (!e || !it || !n.isConnected) { self.ecritures.delete(n); return; }
+      if (document.hidden || it.interrompu || it.erreur) { self._finirEcriture(n); self._rendreTexte(it, n); rendu = true; return; }
+      var dt = e.t ? Math.min(0.1, (maintenant - e.t) / 1000) : 1 / 60;
+      e.t = maintenant;
+      var len = e.src.length, fini = !it.enCours;
+      var retard = len - e.aff;
+      var limite = Math.max(90, e.debit * RETARD_MAX_S);
+      if (retard > limite) { e.aff = len - limite; retard = limite; }   // trop de retard : on rattrape
+      e.aff = Math.min(len, e.aff + Math.max(VITESSE_MIN, retard / (fini ? TAU_FIN : TAU)) * dt);
+      var k = Math.floor(e.aff);
+      var c = e.src.charCodeAt(k - 1);
+      if (k < len && c >= 0xD800 && c <= 0xDBFF) k++;   // ne pas couper un emoji en deux
+      if (k >= len && fini) { self._finirEcriture(n); self._rendreTexte(it, n); rendu = true; return; }
+      if (k !== e.k) {
+        e.k = k;
+        var frag = BT.rendreMarkdown(e.src.slice(0, k), { enCours: true });
+        ajouterCurseur(frag);
+        n.replaceChildren(frag);
+        rendu = true;
+      }
+      if (k < len || fini) actif = true;
+    });
+    if (rendu) this.emit('rendu');
+    if (actif) this._planifierEcriture();
+  };
+
+  /* Fin de l'écriture : le prochain rendu affiche le texte complet, sans curseur. */
+  VueFil.prototype._finirEcriture = function (n) {
+    n._ecr = null;
+    n._src = null;
+    this.ecritures.delete(n);
   };
 
   function remplirResume(n, nom, cible, mono, etat, titre) {
@@ -425,11 +534,22 @@
     n.replaceChildren.apply(n, enfants);
   };
 
+  /* Part du quota 5 h consommée par le tour : « ≈ 0,42 % du quota 5 h » (2 décimales sous 1 %, 1 au-delà). */
+  function texteQuota(q) {
+    if (!q || typeof q.pct !== 'number' || !isFinite(q.pct)) return '';
+    var v = q.pct.toFixed(q.pct < 1 ? 2 : 1).replace('.', ',');
+    return (q.approx ? '≈ ' : '') + v + ' % quota';
+  }
+
   VueFil.prototype._rendreFin = function (it, n) {
     var t = it.interrompu ? 'Interrompu' : it.erreur ? 'Terminé sur une erreur' : 'Terminé';
     if (it.duree && !it.interrompu) t += ' en ' + BT.dureeLisible(it.duree);
-    n.textContent = t;
+    var q = texteQuota(it.quota);
+    if (q) n.replaceChildren(document.createTextNode(t), el('span', 'fin-quota', ' · ' + q));
+    else n.textContent = t;
     n.classList.toggle('est-erreur', !!it.erreur);
+    // Pas de curseur à gérer ici : à la fin du tour, Claude Code a fermé tous les blocs ; chacun finit
+    // d'afficher ses derniers caractères (≈ 0,1 s) puis retire son curseur.
   };
 
   /* Tout ouvrir / fermer (outils et réflexions) — utile pour les captures et le raccourci. */

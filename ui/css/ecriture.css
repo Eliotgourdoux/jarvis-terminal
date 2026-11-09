@@ -1,0 +1,27 @@
+/* Better Terminal For Claude — écriture de la réponse et espace réservé du défilement.
+ * Le curseur n'existe que pendant qu'un bloc s'écrit (js/vue-fil.js) : aucune animation hors écriture.
+ * Il est recréé à chaque caractère affiché, donc reste plein pendant la frappe et ne clignote
+ * qu'après une demi-seconde sans nouveau texte. */
+
+/* Sous le fil : de quoi monter le message d'Eliot en haut même si la réponse est courte (js/defilement.js). */
+.espace-ancre { height: 0; pointer-events: none; }
+
+.curseur-ecriture {
+  display: inline-block;
+  width: 2px; height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.17em;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: curseur-clignote 1.1s steps(1, end) .5s infinite;
+}
+pre .curseur-ecriture { height: 1.15em; }
+
+@keyframes curseur-clignote { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+
+/* Part du quota dans le pied de fin de tour : plus discrète que le reste. */
+.fin-tour .fin-quota { color: var(--faint); opacity: .8; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .curseur-ecriture { animation: none; }
+}
