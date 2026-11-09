@@ -4,11 +4,11 @@ import CoreAudio
 import CoreMedia
 
 /// Choix du micro (09/11/2026). Deux modes, réglage `microPrefere` :
-/// - `.mac` (défaut, valeur "integre") : le micro intégré du Mac quand il existe. Le micro d'un casque Bluetooth fait
+/// - `.mac` (valeur "integre") : le micro intégré du Mac quand il existe. Le micro d'un casque Bluetooth fait
 ///   passer le casque en mode « appel » (HFP) : son dégradé dans les oreilles, entrée 16 à 24 kHz (AirPods Pro d'Eliot :
 ///   24 kHz), et un Sony WH-1000XM4 en HFP a déjà renvoyé un silence complet au mode Jarvis.
-/// - `.branche` (valeur "defaut", déjà connue des anciennes versions) : le micro d'entrée choisi dans macOS
-///   (AirPods compris, donc HFP assumé). Filet : si ce micro ne renvoie que des zéros exacts pendant 3 s, repli sur le
+/// - `.branche` (défaut depuis le 09/11/2026, choix d'Eliot : parler via ses AirPods ; valeur "defaut") : le micro d'entrée choisi dans macOS
+///   (AirPods compris, donc HFP assumé). Filet : si ce micro ne renvoie que des zéros exacts pendant 8 s, repli sur le
 ///   micro intégré jusqu'au prochain changement de périphérique.
 /// Le micro choisi est surveillé (branchement, débranchement, micro par défaut de macOS, mode) : `changement` est
 /// posté sur le fil principal, et une `CaptureMicro` en cours bascule à chaud sur le nouveau micro.
@@ -22,7 +22,7 @@ enum ChoixMicro {
     private static let integreTransport = Int32(bitPattern: 0x626c_746e)   // 'bltn'
 
     static var mode: Mode {
-        get { Reglages.texte(cle) == Mode.branche.rawValue ? .branche : .mac }
+        get { Reglages.texte(cle) == Mode.mac.rawValue ? .mac : .branche }
         set {
             let avant = mode
             Reglages.mettre(newValue.rawValue, cle)
@@ -64,7 +64,7 @@ enum ChoixMicro {
     fileprivate static func replier(id: String, nom: String) {
         guard mode == .branche, repli != id else { return }
         repli = id
-        journal("micro : « \(nom) » ne renvoie que des zéros depuis 3 s, repli sur le micro du Mac")
+        journal("micro : « \(nom) » ne renvoie que des zéros depuis 8 s, repli sur le micro du Mac")
         SurveillanceMicro.partage.signaler(forcer: true)
     }
 }
@@ -438,7 +438,7 @@ final class CaptureMicro {
             } else { nul = false }
             if nul {
                 zeros.secondes += Double(b.frameLength) / b.format.sampleRate
-                if zeros.secondes >= 3 { zeros.surveiller = false; muet = appareilCapte }
+                if zeros.secondes >= 8 { zeros.surveiller = false; muet = appareilCapte }   // 8 s : les AirPods rendent des zéros 3 à 5 s le temps de passer en mode micro (19:37, 09/11)
             } else { zeros.surveiller = false }   // du vrai son : ce micro marche
         }
         verrou.unlock()
