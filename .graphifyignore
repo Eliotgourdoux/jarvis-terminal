@@ -24,3 +24,10 @@ caches/
 tmp/
 *.bak*
 *.min.js
+
+# Bibliothèques tierces (09/11/2026) : 19 000 des 20 000 nœuds venaient de là
+ui/apercu/
+ui/vendor/
+moteur/lecture-sdk/
+moteur/journal/
+fixtures/
