@@ -123,6 +123,7 @@ final class Session {
             if let v = o["effort"] { if v is NSNull { e = nil } else if let s = v as? String, Validation.effort(s) { e = s } else { refuser("relancer : effort invalide"); return } }
             relancer(modele: m, effort: e)
         case "ouvrirTerminal": ouvrirTerminal()
+        case "ouvrirShell": ouvrirShell()
         case "fermer": fenetre.fermerFenetre()
         case "copier":
             guard let t = o["texte"] as? String, t.utf8.count <= 20_000_000 else { refuser("copier : texte invalide"); return }
@@ -592,6 +593,28 @@ final class Session {
             arretVoulu = "relance"
             arreterProcessus(p) { DispatchQueue.main.async(execute: suite) }
         } else { suite() }
+    }
+
+    /// Bouton « Terminal » (09/11/2026) : une fenêtre Terminal.app dans le dossier du projet, pour taper des
+    /// commandes à côté. La session Claude continue dans l'app. `open -a Terminal <dossier>` : aucune commande
+    /// à échapper, aucune autorisation d'automatisation.
+    private func ouvrirShell() {
+        var dossier: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: cwd, isDirectory: &dossier), dossier.boolValue else {
+            pousser("stderr", "Dossier du projet introuvable : \(cwd)\n"); return
+        }
+        guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
+            pousser("stderr", "Terminal.app introuvable.\n"); return
+        }
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.activates = true
+        NSWorkspace.shared.open([URL(fileURLWithPath: cwd, isDirectory: true)], withApplicationAt: terminal, configuration: cfg) { [weak self] _, err in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                journal("session \(self.sessionId) : shell dans \(self.cwd) → \(err == nil ? "ok" : "échec \(err!.localizedDescription)")")
+                if let err { self.pousser("stderr", "Terminal n'a pas pu s'ouvrir : \(err.localizedDescription)\n") }
+            }
+        }
     }
 
     private func ouvrirTerminal() {

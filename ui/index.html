@@ -29,15 +29,22 @@
   <div id="barre-etat" class="barre-etat etat-pret"><span class="point"></span><span id="barre-etat-texte">Prêt</span></div>
   <div id="barre-vocal" class="barre-vocal" hidden><span id="barre-vocal-icone" class="barre-vocal-icone"></span><span id="barre-vocal-texte"></span></div>
   <div id="barre-jetons" class="barre-jetons" hidden></div>
-  <div class="barre-espace"></div>
   <button type="button" id="bt-compacter" class="barre-bouton" title="Résumer la conversation pour libérer du contexte (/compact)"><span class="libelle">Compacter</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v4.5M5.8 3.8 8 6l2.2-2.2M8 14.5V10M5.8 12.2 8 10l2.2 2.2M2.5 8h11"/></svg></button>
+  <div class="barre-espace"></div>
   <button type="button" id="bt-mes-messages" class="barre-bouton" title="Retrouver tes messages (⌥↑ et ⌥↓ pour passer de l’un à l’autre)"><span class="libelle">Mes messages</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10a1.5 1.5 0 0 1 1.5 1.5v5.5a1.5 1.5 0 0 1-1.5 1.5H7.2L4.5 13.7V11.5H3A1.5 1.5 0 0 1 1.5 10V4.5A1.5 1.5 0 0 1 3 3z"/></svg><span class="compte">0</span></button>
   <label class="barre-choix" title="Modèle de Claude"><span class="barre-choix-nom">Modèle</span><select id="choix-modele" aria-label="Modèle"></select></label>
   <label class="barre-choix" title="Effort de réflexion"><span class="barre-choix-nom">Effort</span><select id="choix-effort" aria-label="Effort"></select></label>
   <label id="choix-permission-boite" class="barre-choix" title="Ce que Claude peut faire sans te demander"><span class="barre-choix-nom">Permissions</span><select id="choix-permission" aria-label="Permissions"></select></label>
-  <button type="button" id="bt-terminal" class="barre-bouton" title="Reprendre cette session dans Terminal.app"><span class="libelle">Ouvrir dans le terminal</span><span class="libelle-court">Terminal</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4.5 6.5 6.8 8.5 4.5 10.5M8.5 10.5h3"/></svg></button>
+  <button type="button" id="bt-terminal" class="barre-bouton" title="Terminal : ouvrir un terminal dans le dossier, ou y passer la session" aria-haspopup="menu"><span class="libelle">Terminal</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4.5 6.5 6.8 8.5 4.5 10.5M8.5 10.5h3"/></svg><svg class="chevron-barre" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg></button>
   <button type="button" id="bt-fermer" class="barre-bouton fermer" title="Arrêter Claude et fermer la fenêtre"><span class="libelle">Fermer</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
 </header>
+
+<div id="menu-terminal" class="popover popover-court" role="menu" hidden>
+  <ol class="popover-liste">
+    <li><button type="button" class="popover-ligne" role="menuitem" data-action="ouvrirShell"><span class="popover-texte"><b>Ouvrir un terminal dans le dossier</b><br><span class="popover-sous">Claude continue ici</span></span></button></li>
+    <li><button type="button" class="popover-ligne" role="menuitem" data-action="ouvrirTerminal"><span class="popover-texte"><b>Passer la session au terminal</b><br><span class="popover-sous">Claude s’arrête ici et reprend la même conversation dans Terminal</span></span></button></li>
+  </ol>
+</div>
 
 <div id="mes-messages" class="popover" hidden>
   <div class="popover-tete"><span class="popover-titre">Mes messages</span><span class="popover-aide">⌥↑ et ⌥↓ pour passer de l’un à l’autre</span></div>
