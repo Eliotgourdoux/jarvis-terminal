@@ -160,7 +160,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 /* ---------- Zone de défilement ---------- */
 .defile {
   position: fixed; left: 0; right: 0; bottom: 0;
-  top: calc(var(--titre-h) + var(--hauteur-barre));
+  top: calc(var(--titre-h) + var(--hauteur-barre) + var(--hauteur-scene, 0px));
   overflow-y: auto; overflow-x: hidden;
   overscroll-behavior: contain;
   background: var(--fond);
@@ -575,7 +575,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 
 /* ---------- Recherche ---------- */
 .recherche {
-  position: fixed; z-index: 35; top: calc(var(--titre-h) + var(--hauteur-barre) + 8px);
+  position: fixed; z-index: 35; top: calc(var(--titre-h) + var(--hauteur-barre) + var(--hauteur-scene, 0px) + 8px);
   right: max(16px, calc((100% - var(--largeur)) / 2));
   display: flex; align-items: center; gap: 4px; padding: 5px;
   border-radius: 10px;

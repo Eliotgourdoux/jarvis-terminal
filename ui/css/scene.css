@@ -1,0 +1,58 @@
+/* Scène persistante du mode vocal (js/scene.js) : figée sous la barre, alignée sur le fil, fond plein. */
+.scene {
+  position: fixed; z-index: 15; left: 0; right: 0;
+  top: calc(var(--titre-h) + var(--hauteur-barre));
+  background: var(--fond);
+  border-bottom: 1px solid var(--bord);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, .35);
+}
+.scene[hidden] { display: none; }
+.scene-boite {
+  max-width: calc(var(--largeur) + 48px); box-sizing: border-box;
+  margin: 0 auto; padding: 8px 24px 10px;
+}
+.scene-tete {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 0 6px; font: 500 12.5px var(--police); color: var(--faint);
+}
+.scene-titre { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
+.scene-libelle { text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+.scene-nom { color: var(--dim); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.scene-bouton {
+  font: 500 12px var(--police); color: var(--faint); background: transparent;
+  border: 1px solid var(--bord); border-radius: 6px; padding: 2px 9px; cursor: pointer;
+}
+.scene-bouton:hover, .scene-bouton:focus-visible { color: var(--texte); border-color: var(--bord-fort); outline: none; }
+.scene-corps {
+  position: relative; overflow: hidden;
+  background: var(--code); border: 1px solid var(--bord); border-radius: 8px;
+  transition: height .25s ease-out;
+}
+.scene.repliee .scene-corps, .scene.repliee .scene-erreur { display: none; }
+.scene.repliee .scene-tete { padding-bottom: 0; }
+.scene-cadre { position: absolute; inset: 0; transition: opacity .25s ease-out; }
+.scene-cadre.arrivee { opacity: 0; pointer-events: none; }
+.scene-cadre iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+.scene-erreur { border: 0; padding: 6px 0 0; background: transparent; }
+
+/* Dans le fil d'un tour vocal : la scène est en haut, ici un simple renvoi. */
+.scene-renvoi {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 6px 0; padding: 7px 12px; border: 1px solid var(--bord); border-radius: 8px;
+  font: 13px/1.4 var(--police); color: var(--faint); background: var(--surface);
+}
+.scene-renvoi-voir {
+  flex: none; font: 500 12px var(--police); color: var(--faint); background: transparent; border: 0; padding: 0;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.scene-renvoi-voir:hover { color: var(--texte); }
+
+/* Bloc ```jarvis scene=nom``` hors mode vocal : replié. */
+.bloc-jarvis { margin: 6px 0; font: 13px var(--police); color: var(--faint); }
+.bloc-jarvis > summary { cursor: pointer; user-select: none; padding: 2px 0; }
+.bloc-jarvis > summary:hover { color: var(--dim); }
+.bloc-jarvis > .bloc-code { margin-top: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-corps, .scene-cadre { transition: none; }
+}
