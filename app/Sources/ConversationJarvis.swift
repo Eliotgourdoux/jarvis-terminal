@@ -8,7 +8,7 @@ private final class RelaisTelegram: NSObject, WKScriptMessageHandler {
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) { cible?.messageDeLaPage(m) }
 }
 
-/// La conversation Telegram d'Eliot avec Jarvis (@Mac_Eliot67_bot), épinglée en haut de la barre
+/// La conversation Telegram d'Eliot avec Jarvis (son bot Telegram), épinglée en haut de la barre
 /// (demande d'Eliot, 08/11/2026 : « ma conv Telegram, mais dans cette UI »).
 /// Lecture : ~/.claude/channels/telegram/jarvis/transcript.md, écrit par tg-router.sh dans les deux sens.
 /// Envoi : par l'API locale de Beeper Desktop, depuis le compte Telegram d'Eliot (08/11/2026). Le message
@@ -19,8 +19,13 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
     static let shared = ConversationJarvis()
     static let dossier = URL(fileURLWithPath: NSHomeDirectory() + "/.claude/channels/telegram/jarvis", isDirectory: true)
     private var transcript: URL { Self.dossier.appendingPathComponent("transcript.md") }
-    /// Le chat Telegram avec @Mac_Eliot67_bot, vu par Beeper (pas « Jarvis Local », l'ancien bot de test).
-    private static let chatBeeper = "!1alVXIHrqV4p3wlctRw1:beeper.local"
+    /// Le chat Telegram avec le bot Jarvis, vu par Beeper : identifiant lu dans ~/.config/better-terminal/jarvis-chat
+    /// (ou la variable BT_BEEPER_CHAT), jamais écrit dans le code.
+    private static let chatBeeper: String = {
+        if let e = ProcessInfo.processInfo.environment["BT_BEEPER_CHAT"], !e.isEmpty { return e }
+        let f = NSHomeDirectory() + "/.config/better-terminal/jarvis-chat"
+        return ((try? String(contentsOfFile: f, encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }()
     private static let apiBeeper = "http://localhost:23373/v1"
     private var envoisEnCours = 0
     /// Vocal enregistré dans la fenêtre Jarvis (08/11/2026) : part comme un vrai vocal Telegram, par Beeper.
@@ -91,6 +96,35 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
     func marquerAffichee() {
         if nonLu { nonLu = false; FenetrePrincipale.shared.planifierMaj() }
         if pagePrete { appeler("window.fil && window.fil.focus()", [:]) }
+        marquerLuBeeper()
+    }
+
+    /// Un « vu » ici = un « vu » dans Telegram et Beeper (demande d'Eliot, 09/11/2026) : POST /chats/{id}/read.
+    /// Une fois par message (signature du dernier), jamais en boucle. Beeper fermé : on ne le lance pas pour ça.
+    private var signatureLueBeeper = ""
+    private func marquerLuBeeper() {
+        guard !signatureDernier.isEmpty, signatureDernier != signatureLueBeeper, BeeperDiscret.tourne() else { return }
+        let jeton = (try? String(contentsOfFile: NSHomeDirectory() + "/.config/beeper/token", encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let permis = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        guard !jeton.isEmpty, let chat = Self.chatBeeper.addingPercentEncoding(withAllowedCharacters: permis),
+              let url = URL(string: "\(Self.apiBeeper)/chats/\(chat)/read") else { return }
+        let sig = signatureDernier
+        signatureLueBeeper = sig
+        var req = URLRequest(url: url, timeoutInterval: 8)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer " + jeton, forHTTPHeaderField: "Authorization")
+        req.httpBody = Data("{}".utf8)
+        URLSession.shared.dataTask(with: req) { [weak self] _, rep, err in
+            let code = (rep as? HTTPURLResponse)?.statusCode ?? 0
+            DispatchQueue.main.async {
+                if err != nil || !(200..<300).contains(code) {
+                    journal("jarvis : « vu » Beeper en échec (code \(code))")
+                    if self?.signatureLueBeeper == sig { self?.signatureLueBeeper = "" }   // on retentera au prochain affichage
+                }
+            }
+        }.resume()
     }
 
     // MARK: - Suivi du fichier
@@ -160,6 +194,9 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
         let sig = date + qui + String(corps.prefix(80))
         if !premiere, sig != signatureDernier, deJarvis, !FenetrePrincipale.shared.jarvisDevant { nonLu = true }
         signatureDernier = sig
+        // Message arrivé pendant qu'Eliot a la conversation sous les yeux : vu aussi côté Telegram.
+        let f0 = FenetrePrincipale.shared
+        if !premiere, f0.jarvisDevant, f0.window.isVisible, f0.window.isKeyWindow, NSApp.isActive { marquerLuBeeper() }
         FenetrePrincipale.shared.planifierMaj()
     }
 
