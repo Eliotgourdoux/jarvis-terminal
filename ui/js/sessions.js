@@ -162,6 +162,7 @@
 
   function nouvelle() { envoyer({ type: 'nouvelle' }); }
   document.getElementById('nouvelle').addEventListener('click', nouvelle);
+  document.getElementById('discussion').addEventListener('click', function () { envoyer({ type: 'discussion' }); });
   document.getElementById('nouvelle-vide').addEventListener('click', nouvelle);
 
   if (!pont) {

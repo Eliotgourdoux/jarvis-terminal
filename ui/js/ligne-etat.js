@@ -114,12 +114,13 @@
     }
 
     var q = etat.quota || {}, q5 = q.cinqH, q7 = q.semaine;
-    poser(this.cinqH, q5 ? '5 h : ' + entierPct(q5.pct) : '',
+    poser(this.cinqH, q5 ? '5 h ' + entierPct(q5.pct) : '',
       q5 ? 'Quota de l’abonnement sur 5 heures : ' + entierPct(q5.pct) + '\nRemise à zéro ' + remise(q5.resetsAt) : '', q5 ? q5.pct : 0);
-    poser(this.semaine, q7 ? (q5 ? 'semaine : ' : 'Semaine : ') + entierPct(q7.pct) : '',
+    poser(this.semaine, q7 ? (q5 ? 'sem. ' : 'Semaine ') + entierPct(q7.pct) : '',
       q7 ? 'Quota de l’abonnement sur la semaine : ' + entierPct(q7.pct) + '\nRemise à zéro ' + remise(q7.resetsAt) : '', q7 ? q7.pct : 0);
 
-    var d = etat.derniere, cal = etat.calibrage || {}, texte = '', titre = '';
+    // Allégé (Eliot, 09/11/2026 : « trop chargé ») : le % par réponse n'est plus que sous chaque réponse.
+    var d = null, cal = etat.calibrage || {}, texte = '', titre = '';
     if (d && typeof d.pct === 'number') {
       texte = 'Dernière réponse ≈ ' + BT.pctQuota(d.pct);
       titre = 'Part du quota sur 5 heures prise par la dernière réponse (estimation).\n' +

@@ -197,3 +197,16 @@ button.td-case:hover:not(:disabled) { background: var(--ambre-fond); }
 .td-ligne.fait .td-num { opacity: .55; }
 .tp-tache .td-num { line-height: 1.45; padding-top: 1px; }
 .tp-etape .td-num { font-size: 12.5px; }
+
+/* Supprimer une tâche (09/11/2026) : croix discrète au survol, ligne « Supprimée · Annuler » 5 s. */
+.td-suppr { flex: none; margin-left: auto; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px;
+  background: transparent; color: var(--faint); cursor: pointer; opacity: 0; display: grid; place-items: center; }
+.td-suppr svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.td-ligne:hover .td-suppr, .tp-tache:hover .td-suppr, .td-suppr:focus-visible { opacity: 1; }
+.td-suppr:hover { color: var(--rouge, #f87171); background: rgba(248,113,113,.12); }
+.tp-tache .td-suppr { align-self: flex-start; margin-top: 1px; }
+.supprimee { align-items: center; color: var(--faint); font-style: italic; }
+.td-suppr-texte { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-annuler { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--lien); font: inherit;
+  font-style: normal; font-weight: 600; cursor: pointer; padding: 0 2px; }
+.td-annuler:hover { text-decoration: underline; }

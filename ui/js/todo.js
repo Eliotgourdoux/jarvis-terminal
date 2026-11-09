@@ -35,6 +35,7 @@
     seq: 0, listeEnCours: 0, listeDepuis: 0, derniereLecture: 0, minuteur: null,
     attente: Object.create(null),     // demande -> { action, titre }
     enCochage: Object.create(null),   // titre -> true
+    enSuppression: Object.create(null),   // titre -> { id, minuterie, envoye }
     deplies: Object.create(null),     // titre -> notes dépliées
     plan: null,                       // { taches: [{ texte, statut }] }
     planReplie: false, planSignature: '',
@@ -56,11 +57,12 @@
 
   /* ================= Échanges avec la coque ================= */
 
-  function demander(action, titre) {
+  function demander(action, titre, id) {
     var d = ++etat.seq;
     etat.attente[d] = { action: action, titre: titre || '' };
     var msg = { action: action, demande: d };
     if (titre != null) msg.titre = titre;
+    if (id) msg.id = id;
     if (natif()) BT.pont.envoyer('todo', msg);
     else setTimeout(function () { simuler(msg); }, action === 'lister' ? 120 : 250);
     return d;
@@ -107,6 +109,14 @@
       lister(true);
       return;
     }
+    if (action === 'supprimer') {
+      delete etat.enSuppression[titre];
+      if (r.ok) etat.taches = etat.taches.filter(function (t) { return t.titre !== titre; });
+      etat.erreurAction = r.ok ? '' : (r.erreur || 'Impossible de supprimer la tâche.');
+      rendreProjet();
+      lister(true);
+      return;
+    }
     if (action === 'ajouter') {
       if (!etat.pret) return;
       n.champ.disabled = false;
@@ -140,6 +150,9 @@
       factices = factices.filter(function (t) { return t.titre !== m.titre; });
       r.titre = m.titre; r.ok = factices.length < avant;
       if (!r.ok) r.erreur = 'Aucune tâche ouverte ne correspond à « ' + m.titre + ' ».';
+    } else if (m.action === 'supprimer') {
+      factices = factices.filter(function (t) { return t.titre !== m.titre; });
+      r.titre = m.titre; r.ok = true;
     } else if (m.action === 'ajouter') {
       r.titre = m.titre;
       r.ok = !factices.some(function (t) { return t.titre.toLowerCase() === m.titre.toLowerCase(); });
@@ -186,6 +199,7 @@
 
   function ligneTache(t, i) {
     var titre = t.titre || '';
+    if (etat.enSuppression[titre]) return ligneSupprimee(t, i, 'tp-tache');
     var enCours = !!etat.enCochage[titre];
     var li = el('li', 'tp-tache' + (enCours ? ' en-cours' : ''));
     var c = el('button', 'tp-case');
@@ -221,6 +235,7 @@
       });
     }
     li.appendChild(corps);
+    if (!enCours) li.appendChild(boutonSuppr(t));
     return li;
   }
 
@@ -267,6 +282,49 @@
     etat.erreurAction = '';
     rendreProjet();
     demander('cocher', titre);
+  }
+
+  /* Supprimer (09/11/2026) : la tâche disparaît tout de suite, « Annuler » pendant 5 s, puis suppression
+   * définitive dans Rappels (`todo suppr`, par id). Une tâche supprimée ne compte pas comme faite. */
+  var DELAI_ANNULER = 5000;
+  function supprimer(t) {
+    var titre = t.titre || '';
+    if (!titre || etat.enSuppression[titre] || etat.enCochage[titre]) return;
+    var x = etat.enSuppression[titre] = { id: t.id || '', envoye: false };
+    x.minuterie = setTimeout(function () { x.envoye = true; demander('supprimer', titre, x.id); rendreProjet(); }, DELAI_ANNULER);
+    etat.erreurAction = '';
+    rendreProjet();
+  }
+  function annulerSuppression(titre) {
+    var x = etat.enSuppression[titre];
+    if (!x || x.envoye) return;
+    clearTimeout(x.minuterie);
+    delete etat.enSuppression[titre];
+    rendreProjet();
+  }
+  function boutonSuppr(t) {
+    var b = el('button', 'td-suppr');
+    b.type = 'button';
+    b.title = 'Supprimer la tâche (sans la compter comme faite)';
+    b.setAttribute('aria-label', 'Supprimer « ' + (t.titre || '') + ' »');
+    b.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
+    b.addEventListener('click', function (e) { e.stopPropagation(); supprimer(t); });
+    return b;
+  }
+  /* Ligne « supprimée · Annuler » à la place de la tâche. */
+  function ligneSupprimee(t, i, classe) {
+    var titre = t.titre || '';
+    var x = etat.enSuppression[titre];
+    var li = el('li', classe + ' supprimee');
+    li.appendChild(numero(i));
+    li.appendChild(el('span', 'td-suppr-texte', x.envoye ? 'Suppression…' : 'Supprimée : ' + titre));
+    if (!x.envoye) {
+      var a = el('button', 'td-annuler', 'Annuler');
+      a.type = 'button';
+      a.addEventListener('click', function (e) { e.stopPropagation(); annulerSuppression(titre); });
+      li.appendChild(a);
+    }
+    return li;
   }
 
   function ajouter() {
@@ -438,7 +496,7 @@
     if (b.hidden) { etat.toiCompteVu = taches.length; return; }
     // Plus de dépliage automatique (demande d'Eliot, 09/11/2026 : « relou ») : seul son clic plie ou déplie.
     etat.toiCompteVu = taches.length;
-    var ouvertes = taches.filter(function (t) { return !etat.enCochage[t.titre]; });
+    var ouvertes = taches.filter(function (t) { return !etat.enCochage[t.titre] && !etat.enSuppression[t.titre]; });
     n.dToiTete.compte.textContent = String(ouvertes.length);
     var iPrem = taches.findIndex(function (t) { return !etat.enCochage[t.titre]; });
     n.dToiTete.resume.textContent = iPrem >= 0 ? (iPrem + 1) + '. ' + taches[iPrem].titre : '';
@@ -446,6 +504,7 @@
     n.dToiListe.textContent = '';
     taches.forEach(function (t, i) {
       var titre = t.titre || '';
+      if (etat.enSuppression[titre]) { n.dToiListe.appendChild(ligneSupprimee(t, i, 'td-ligne a-toi')); return; }
       var coche = !!etat.enCochage[titre];
       var li = el('li', 'td-ligne a-toi' + (coche ? ' fait' : ''));
       li.appendChild(numero(i));
@@ -461,6 +520,7 @@
       li.appendChild(tx);
       var ech = texteEcheance(t.echeance);
       if (ech) li.appendChild(el('span', 'td-echeance' + (ech.retard ? ' retard' : ech.proche ? ' proche' : ''), ech.texte));
+      if (!coche) li.appendChild(boutonSuppr(t));
       n.dToiListe.appendChild(li);
     });
   }

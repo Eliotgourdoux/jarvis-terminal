@@ -173,6 +173,12 @@ enum Environnement {
         }
         return connus.first { fm.isExecutableFile(atPath: $0) }
     }
+
+    /// terminal-notifier à l'icône marbre de l'app (~/.claude/bin/notifier → ~/Applications/Jarvis Notifier.app, 16/11/2026).
+    static func notifier(_ env: [String: String]) -> String? {
+        let p = (env["HOME"] ?? NSHomeDirectory()) + "/.claude/bin/notifier"
+        return FileManager.default.isExecutableFile(atPath: p) ? p : nil
+    }
 }
 
 /// Le vrai binaire claude (dans le shell, `claude` est un alias) : ~/.local/bin/claude, sinon `whence -p claude`.
@@ -200,6 +206,7 @@ enum RegistreProjets {
 
     static func info(cwd: String) -> InfoProjet {
         let defaut = InfoProjet(nom: (cwd as NSString).lastPathComponent, emoji: "📁")
+        if cwd == cheminReel(Entrees.dossierDiscussions) { return InfoProjet(nom: "Discussion", emoji: "💬") }
         guard let d = FileManager.default.contents(atPath: chemin),
               let liste = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return defaut }
         let projets: [(chemin: String, nom: String, emoji: String, id: String?)] = liste.compactMap {

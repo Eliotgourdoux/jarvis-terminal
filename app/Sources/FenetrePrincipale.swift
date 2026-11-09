@@ -81,14 +81,14 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     /// (alors seule la session mémorisée passe devant).
     func doitPasserDevant(_ v: FenetreSession) -> Bool {
         guard restauration else { return true }
-        if let id = v.sessionLiee?.sessionId, id == pageAReprendre { return true }
+        if let id = v.idSession, id == pageAReprendre { return true }
         return false
     }
 
     private func memoriserPage() {
         guard !restauration, !RegistreSessions.shared.quitte, !PiloteDev.actif else { return }
         if jarvisDevant { Reglages.mettre("jarvis", Self.clePage) }
-        else if let id = selection?.sessionLiee?.sessionId { Reglages.mettre(id, Self.clePage) }
+        else if let id = selection?.idSession { Reglages.mettre(id, Self.clePage) }
     }
 
     private override init() {
@@ -170,13 +170,15 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         DispatchQueue.main.async { ConversationJarvis.shared.demarrer() }
         NotificationCenter.default.addObserver(self, selector: #selector(registreChange(_:)), name: RegistreSessions.changement, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(tourTermine(_:)), name: RegistreSessions.tourTermine, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(registreChange(_:)), name: VictusLien.changement, object: nil)
     }
 
     // MARK: - Sessions
 
     func ajouter(_ v: FenetreSession) {
         guard !vues.contains(where: { $0 === v }) else { return }
-        vues.append(v)
+        // sessions du Mac d'abord, puis celles du Victus (même ordre que la barre)
+        if !v.estVictus, let i = vues.firstIndex(where: { $0.estVictus }) { vues.insert(v, at: i) } else { vues.append(v) }
         v.vue.frame = zone.bounds
         v.vue.autoresizingMask = [.width, .height]
         zone.addSubview(v.vue, positioned: .below, relativeTo: jarvisDevant ? ConversationJarvis.shared.vue : selection?.vue)
@@ -189,7 +191,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         guard let i = vues.firstIndex(where: { $0 === v }) else { return }
         vues.remove(at: i)
         v.vue.removeFromSuperview()
-        if let id = v.sessionLiee?.sessionId { nonLues.remove(id) }
+        if let id = v.idSession { nonLues.remove(id) }
         if selection === v || (selection == nil && !jarvisDevant) {
             selection = nil
             if !vues.isEmpty { selectionner(vues[min(i, vues.count - 1)]) }
@@ -205,13 +207,11 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         if jarvisDevant { jarvisDevant = false; ConversationJarvis.shared.vue.isHidden = true }
         mettreAuDessus(v.vue)
         majTitre()
-        if let s = v.sessionLiee {
-            nonLues.remove(s.sessionId)
-            s.marquerActivee()
-        }
+        if let id = v.idSession { nonLues.remove(id) }
+        v.sessionLiee?.marquerActivee()
         window.makeFirstResponder(v.web)
         planifierMaj()
-        if restauration, let id = v.sessionLiee?.sessionId, id == pageAReprendre { finirRestauration() }
+        if restauration, let id = v.idSession, id == pageAReprendre { finirRestauration() }
         memoriserPage()
     }
 
@@ -260,20 +260,52 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     func estChoisie(_ v: FenetreSession) -> Bool { selection === v }
 
     /// ⌘W : ferme la session affichée (la fenêtre reste, avec les autres sessions).
-    func fermerSelection() { selection?.sessionLiee?.fermer() }
+    func fermerSelection() { selection?.fermerFenetre() }
 
-    /// ⌘1…⌘9.
+    /// ⌘1…⌘9, dans l'ordre de la barre (sessions du Mac, puis du Victus, ouvertes ou non dans l'app).
     func choisir(numero n: Int) {
-        guard n >= 1, n <= vues.count else { return }
-        selectionner(vues[n - 1]); montrer()
+        let o = ordre()
+        guard n >= 1, n <= o.count else { return }
+        switch o[n - 1] {
+        case .vue(let v): selectionner(v)
+        case .victus(let id): VictusSession.montrer(id)
+        }
+        montrer()
+    }
+
+    /// Une session du Victus vient de finir un tour : « Réponse prête » si Eliot ne la regarde pas.
+    func marquerNonLu(_ id: String, vue: FenetreSession) {
+        guard !(selection === vue && window.isKeyWindow && NSApp.isActive) else { return }
+        nonLues.insert(id)
+        planifierMaj()
+    }
+
+    // MARK: - Ordre de la barre : Mac, puis Victus
+
+    private enum Entree { case vue(FenetreSession), victus(String) }
+
+    private func ordre() -> [Entree] {
+        let mac = vues.filter { !$0.estVictus && !($0.sessionLiee?.estFermee ?? true) }
+        let distantes = vues.filter(\.estVictus)
+        var o: [Entree] = mac.map { .vue($0) }
+        var vus = Set<String>()
+        for s in VictusLien.shared.sessions {
+            guard let id = (s["id"] as? String)?.lowercased(), vus.insert(id).inserted else { continue }
+            if let v = distantes.first(where: { $0.idSession == id }) { o.append(.vue(v)) } else { o.append(.victus(id)) }
+        }
+        // vues ouvertes dont le démon n'a pas (encore) parlé : à la fin
+        for v in distantes where !vus.contains(v.idSession ?? "") { o.append(.vue(v)) }
+        return o
     }
 
     /// Session suivante (+1) ou précédente (-1), en boucle.
     func decaler(_ pas: Int) {
         guard !vues.isEmpty else { return }
-        if jarvisDevant { selectionner(vues[pas > 0 ? 0 : vues.count - 1]); return }
-        let i = vues.firstIndex { $0 === selection } ?? 0
-        selectionner(vues[(i + pas + vues.count) % vues.count])
+        let liste: [FenetreSession] = ordre().compactMap { if case .vue(let v) = $0 { return v }; return nil }
+        guard !liste.isEmpty else { return }
+        if jarvisDevant { selectionner(liste[pas > 0 ? 0 : liste.count - 1]); return }
+        let i = liste.firstIndex { $0 === selection } ?? 0
+        selectionner(liste[(i + pas + liste.count) % liste.count])
     }
 
     // MARK: - Barre latérale
@@ -282,7 +314,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
 
     @objc private func tourTermine(_ n: Notification) {
         guard let id = n.userInfo?["sessionId"] as? String,
-              let v = vues.first(where: { $0.sessionLiee?.sessionId == id }) else { return }
+              let v = vues.first(where: { $0.idSession == id }) else { return }
         if !(selection === v && window.isKeyWindow && NSApp.isActive) { nonLues.insert(id) }
         planifierMaj()
     }
@@ -299,6 +331,10 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
 
     private func majTitre() {
         if jarvisDevant { window.title = "🤖 Jarvis — Telegram"; return }
+        if let d = selection?.distante {
+            window.title = d.emoji + " " + d.projet + " — Victus" + (d.dansTerminal ? " (dans le terminal)" : "")
+            return
+        }
         guard let s = selection?.sessionLiee else { window.title = "Jarvis Terminal"; return }
         window.title = s.projet.emoji + " " + s.projet.nom + (s.apercu.dansTerminal ? " — dans le Terminal" : "")
     }
@@ -306,13 +342,26 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     private func envoyerListe() {
         majTitre()
         guard barrePrete, let barre else { return }
-        let liste: [[String: Any]] = vues.enumerated().compactMap { i, v in
-            guard let s = v.sessionLiee, !s.estFermee else { return nil }
-            let a = s.apercu
-            return ["id": a.sessionId, "numero": i + 1, "projet": a.projet, "emoji": a.emoji, "cwd": a.cwd,
-                    "etat": a.etat, "resume": a.resume ?? NSNull(), "dernierMessage": a.dernierMessage ?? NSNull(),
-                    "modele": a.modele ?? NSNull(), "dansTerminal": a.dansTerminal,
-                    "maj": a.maj.timeIntervalSince1970 * 1000, "actif": selection === v, "nonLu": nonLues.contains(a.sessionId)]
+        let lien = VictusLien.shared
+        let liste: [[String: Any]] = ordre().enumerated().compactMap { i, e in
+            switch e {
+            case .vue(let v):
+                if let s = v.sessionLiee {
+                    guard !s.estFermee else { return nil }
+                    let a = s.apercu
+                    return ["id": a.sessionId, "numero": i + 1, "projet": a.projet, "emoji": a.emoji, "cwd": a.cwd,
+                            "etat": a.etat, "resume": a.resume ?? NSNull(), "dernierMessage": a.dernierMessage ?? NSNull(),
+                            "modele": a.modele ?? NSNull(), "dansTerminal": a.dansTerminal,
+                            "maj": a.maj.timeIntervalSince1970 * 1000, "actif": selection === v, "nonLu": nonLues.contains(a.sessionId),
+                            "machine": "mac"]
+                }
+                guard let d = v.distante else { return nil }
+                return entreeVictus(d.apercu ?? ["id": d.sessionId, "projet": d.projet, "emoji": d.emoji, "cwd": d.cwd, "etat": "pret"],
+                                    numero: i + 1, actif: selection === v, ouverte: true, connecte: lien.connecte)
+            case .victus(let id):
+                guard let a = lien.session(id) else { return nil }
+                return entreeVictus(a, numero: i + 1, actif: false, ouverte: false, connecte: lien.connecte)
+            }
         }
         let ouvertes = Set(liste.compactMap { $0["id"] as? String })
         let fermetures: [[String: Any]] = RegistreSessions.shared.enFermeture.filter { !ouvertes.contains($0.sessionId) }.map { f in
@@ -324,9 +373,33 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
             ? ["apercu": c.apercu, "maj": (c.dateDernier?.timeIntervalSince1970 ?? 0) * 1000, "actif": jarvisDevant,
                "nonLu": c.nonLu, "occupe": c.occupe] as [String: Any]
             : NSNull()
-        barre.callAsyncJavaScript("if (window.barreSessions) window.barreSessions.maj(liste, jarvis);",
-                                  arguments: ["liste": liste + fermetures, "jarvis": jarvis], in: nil, in: .page) { r in
+        let machines: [String: Any] = ["victus": [
+            "configure": VictusSsh.configure, "etat": lien.etat.rawValue, "erreur": lien.derniereErreur ?? NSNull()
+        ] as [String: Any]]
+        barre.callAsyncJavaScript("if (window.barreSessions) window.barreSessions.maj(liste, jarvis, machines);",
+                                  arguments: ["liste": liste + fermetures, "jarvis": jarvis, "machines": machines], in: nil, in: .page) { r in
             if case .failure(let e) = r { journal("barre : mise à jour en échec — \(e.localizedDescription)") }
+        }
+    }
+
+    /// Une session du Victus dans la barre : les champs du démon, plus l'encadré « Ultron » et l'état du lien.
+    private func entreeVictus(_ a: [String: Any], numero: Int, actif: Bool, ouverte: Bool, connecte: Bool) -> [String: Any] {
+        var e: [String: Any] = ["numero": numero, "actif": actif, "machine": "victus", "ouverte": ouverte, "indisponible": !connecte]
+        for k in ["id", "projet", "emoji", "cwd", "etat", "resume", "dernierMessage", "modele", "effort", "dansTerminal", "maj"] {
+            e[k] = a[k] ?? NSNull()
+        }
+        if let id = a["id"] as? String { e["id"] = id.lowercased(); e["nonLu"] = nonLues.contains(id.lowercased()) }
+        if !(a["maj"] is NSNumber) { e["maj"] = NSNull() }
+        if !(a["dansTerminal"] is Bool) { e["dansTerminal"] = false }
+        return e
+    }
+
+    /// `window.barreSessions.<fonction>(argument)` si la barre la définit.
+    private func appelerBarre(_ fonction: String, _ argument: Any) {
+        guard barrePrete, let barre else { return }
+        barre.callAsyncJavaScript("const b = window.barreSessions; if (b && typeof b[f] === 'function') b[f](a);",
+                                  arguments: ["f": fonction, "a": argument], in: nil, in: .page) { r in
+            if case .failure(let e) = r { journal("barre : \(fonction) en échec — \(e.localizedDescription)") }
         }
     }
 
@@ -336,16 +409,50 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
               let o = m.body as? [String: Any], let type = o["type"] as? String else {
             journal("barre : message refusé"); return
         }
+        let idDemande = (o["id"] as? String).flatMap { Validation.sessionId($0) ? $0.lowercased() : nil }
         func cible() -> FenetreSession? {
-            guard let id = o["id"] as? String, Validation.sessionId(id) else { return nil }
-            return vues.first { $0.sessionLiee?.sessionId == id.lowercased() }
+            guard let id = idDemande else { return nil }
+            return vues.first { $0.idSession == id }
         }
+        let victus = o["machine"] as? String == "victus"
         switch type {
         case "pret": barrePrete = true; envoyerListe()
-        case "choisir": if let v = cible() { selectionner(v) }
+        case "choisir":
+            if let v = cible() { selectionner(v) }
+            else if let id = idDemande, VictusLien.shared.session(id) != nil { VictusSession.montrer(id) }
         case "jarvis": selectionnerJarvis()
-        case "fermer": cible()?.sessionLiee?.fermer()
+        case "fermer":
+            if let v = cible() { v.fermerFenetre() }
+            else if let id = idDemande, VictusLien.shared.session(id) != nil {
+                // session du Victus jamais ouverte dans l'app : le démon l'arrête directement
+                VictusLien.shared.envoyer(["op": "fermer", "sessionId": id])
+            }
+        case "nouvelle" where victus:
+            guard let cwd = o["cwd"] as? String else { journal("barre : nouvelle session Victus sans dossier"); return }
+            let home = VictusLien.shared.home
+            let c = cwd.hasPrefix("~/") ? home + cwd.dropFirst(1) : (cwd == "~" ? home : cwd)
+            guard c.hasPrefix("/"), c == home || c.hasPrefix(home + "/"), !c.contains("\0"), c.utf8.count <= 4096,
+                  !c.split(separator: "/").contains("..") else {
+                appelerBarre("erreur", "Le dossier doit être sous \(home)."); return
+            }
+            VictusSession.nouvelle(cwd: c) { [weak self] err in
+                if let err { self?.appelerBarre("erreur", "Victus : \(err)") } else { self?.appelerBarre("ouverte", c) }
+            }
         case "nouvelle": Entrees.choisirDossier()
+        case "dossiers":
+            VictusLien.shared.requete(["op": "dossiers"], delai: 20) { [weak self] r in
+                if r["ev"] as? String == "dossiers", let l = r["liste"] as? [[String: Any]] {
+                    let propres: [[String: Any]] = l.prefix(200).compactMap { d in
+                        guard let c = d["cwd"] as? String, c.hasPrefix("/") else { return nil }
+                        return ["cwd": c, "nom": d["nom"] as? String ?? (c as NSString).lastPathComponent, "maj": d["maj"] ?? NSNull()]
+                    }
+                    self?.appelerBarre("dossiers", ["liste": propres, "home": VictusLien.shared.home])
+                } else {
+                    self?.appelerBarre("dossiers", ["liste": [], "home": VictusLien.shared.home,
+                                                    "erreur": r["message"] as? String ?? "Le Victus ne répond pas."])
+                }
+            }
+        case "discussion": Entrees.nouvelleDiscussion()
         default: journal("barre : type inconnu « \(type.prefix(30)) »")
         }
     }
@@ -376,7 +483,8 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
 
     func windowDidBecomeKey(_ n: Notification) {
         if jarvisDevant { ConversationJarvis.shared.marquerAffichee() }
-        if let s = selection?.sessionLiee { s.marquerActivee(); if nonLues.remove(s.sessionId) != nil { planifierMaj() } }
+        selection?.sessionLiee?.marquerActivee()
+        if let id = selection?.idSession, nonLues.remove(id) != nil { planifierMaj() }
     }
 
     /// Le bouton rouge cache la fenêtre sans tuer les sessions (⌘W ferme une session, ⌘Q quitte tout).

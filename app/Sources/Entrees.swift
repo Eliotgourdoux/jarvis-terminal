@@ -5,6 +5,8 @@ import AppKit
 /// betterterminal://session?cwd=<chemin>&resume=<id>&prompt=<texte>&modele=<m>&effort=<e>&jeton=<jeton>
 /// betterterminal://focus?session=<id>                       (met la fenêtre de la session devant)
 /// betterterminal://envoyer?session=<id>&texte=<t>&jeton=<j> (registre : message à une session ouverte)
+/// betterterminal://session?machine=victus&cwd=/home/eliotgrx/…  (session lancée sur le Victus, par le lien ssh)
+///   `focus` et `envoyer` reconnaissent aussi les sessions du Victus (VictusSession.swift).
 ///
 /// Le jeton (~/.config/better-terminal/jeton) distingue les appelants locaux d'un lien cliqué sur le web :
 /// sans lui, un `prompt` demande confirmation et `envoyer` est refusé.
@@ -23,6 +25,8 @@ enum Entrees {
         let action = (url.host ?? c.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))).lowercased()
         journal("URL \(action)\(fiable ? " (jeton valide)" : "")")
         switch action {
+        case "session" where q["machine"]?.lowercased() == "victus":
+            sessionVictus(q, fiable: fiable)
         case "session":
             guard let brut = q["cwd"], let cwd = Validation.dossier(brut) else {
                 alerte("Dossier introuvable", "Le lien demande un dossier qui n'existe pas : \(q["cwd"] ?? "(vide)")."); return
@@ -32,10 +36,21 @@ enum Entrees {
             ouvrir(d)
         case "focus":
             if let id = q["session"], let s = RegistreSessions.shared.session(id) { s.mettreDevant() }
+            else if let id = q["session"], VictusSession.existante(id) != nil || VictusLien.shared.session(id) != nil {
+                VictusSession.montrer(id); FenetrePrincipale.shared.montrer()
+            }
             else { NSApp.activate(ignoringOtherApps: true) }
         case "envoyer":
             guard fiable else { journal("URL envoyer refusée : jeton absent ou faux"); return }
             guard let id = q["session"], let t = q["texte"], !t.isEmpty else { return }
+            if RegistreSessions.shared.session(id) == nil, VictusSession.existante(id) != nil || VictusLien.shared.session(id) != nil {
+                // session du Victus : la vue ouverte écrit le message ; sinon le démon le passe directement (op envoyer)
+                if let v = VictusSession.existante(id) { _ = v.envoyerTexte(t, source: "url"); return }
+                VictusLien.shared.requete(["op": "envoyer", "sessionId": id, "texte": t, "source": "jarvis"]) { r in
+                    journal("URL envoyer → Victus \(id) : \(r["ev"] as? String == "envoye" && r["ok"] as? Bool == true ? "ok" : "échec \(r["message"] as? String ?? "")")")
+                }
+                return
+            }
             RegistreSessions.shared.envoyer(t, a: id, source: "url")
         default:
             journal("URL : action inconnue « \(action.prefix(40)) »")
@@ -60,6 +75,39 @@ enum Entrees {
             return
         }
         _ = Session(d)
+    }
+
+    /// `session?machine=victus` : le dossier est celui du Victus (vérifié par le démon), pas du Mac.
+    private static func sessionVictus(_ q: [String: String], fiable: Bool) {
+        let lien = VictusLien.shared
+        let home = lien.home
+        var cwd = q["cwd"] ?? home
+        if cwd == "~" { cwd = home } else if cwd.hasPrefix("~/") { cwd = home + cwd.dropFirst(1) }
+        guard cwd.hasPrefix(home), cwd == home || cwd.hasPrefix(home + "/"), !cwd.split(separator: "/").contains(".."),
+              !cwd.contains("\0"), cwd.utf8.count <= 4096 else {
+            alerte("Dossier refusé", "Une session du Victus s'ouvre dans un dossier sous \(home) : \(cwd.prefix(200))."); return
+        }
+        guard let d = demande(cwd: cwd, resume: q["resume"], prompt: q["prompt"], modele: q["modele"] ?? q["model"], effort: q["effort"]) else { return }
+        if let p = d.prompt, !fiable, !confirmer(d, prompt: p) { journal("URL session Victus : refusée par Eliot"); return }
+        if let r = d.resume, let s = VictusSession.existante(r) {
+            s.fenetre.mettreDevant()
+            if let p = d.prompt { s.envoyerTexte(p, source: "lien") }
+            return
+        }
+        // juste après le lancement de l'app, le lien est encore en train de s'établir : on l'attend 20 s au plus
+        func lancer(essai: Int) {
+            if lien.etat == .connexion, essai < 40 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { lancer(essai: essai + 1) }; return
+            }
+            guard lien.connecte else {
+                alerte("Victus injoignable", lien.etat == .inactif ? "ssh victus n'est pas configuré sur ce Mac." : "La connexion au Victus n'est pas établie (\(lien.derniereErreur ?? "nouvel essai en cours")).")
+                return
+            }
+            VictusSession.nouvelle(cwd: d.cwd, resume: d.resume, prompt: d.prompt, modele: d.modele, effort: d.effort) { err in
+                if let err { alerte("Session du Victus non ouverte", err) }
+            }
+        }
+        lancer(essai: 0)
     }
 
     // MARK: Ligne de commande
@@ -124,6 +172,28 @@ enum Entrees {
         NSApp.activate(ignoringOtherApps: true)
         guard p.runModal() == .OK, let u = p.url, let c = Validation.dossier(u.path) else { return }
         ouvrir(DemandeSession(cwd: c))
+    }
+
+    // MARK: Discussion libre (09/11/2026)
+
+    /// Dossier des discussions sans projet : pas de CLAUDE.md de projet ni de to-do, juste les réglages globaux.
+    static let dossierDiscussions = HOME + "/Claude-Discussions"
+
+    /// Bouton « Discussion » (⇧⌘N) : un chat normal avec Claude, sans choisir de dossier.
+    static func nouvelleDiscussion() {
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(atPath: dossierDiscussions, withIntermediateDirectories: true)
+            let consigne = dossierDiscussions + "/CLAUDE.md"
+            if !fm.fileExists(atPath: consigne) {
+                try "# Discussions libres\n\nCe dossier n'est pas un projet : ce sont des conversations libres avec Eliot (questions, idées, recherche). Pas de to-do de projet ici. Ne crée pas de fichiers dans ce dossier sauf si Eliot le demande.\n"
+                    .write(toFile: consigne, atomically: true, encoding: .utf8)
+            }
+        } catch {
+            alerte("Discussion impossible", "Le dossier \(dossierDiscussions) ne peut pas être créé : \(error.localizedDescription)")
+            return
+        }
+        ouvrir(DemandeSession(cwd: cheminReel(dossierDiscussions)))
     }
 
     // MARK: Dialogues

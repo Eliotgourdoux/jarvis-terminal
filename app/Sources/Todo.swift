@@ -31,7 +31,7 @@ enum TodoProjet {
             DispatchQueue.main.async { repondre(tout) }
         }
 
-        guard let action = o["action"] as? String, ["lister", "cocher", "ajouter"].contains(action) else {
+        guard let action = o["action"] as? String, ["lister", "cocher", "ajouter", "supprimer"].contains(action) else {
             journal("todo : action refusée")
             rendre(["action": "inconnue", "ok": false, "erreur": "Action inconnue."])
             return
@@ -76,13 +76,23 @@ enum TodoProjet {
                 rendre(["projet": infoProjet, "taches": taches])
 
             default:
-                let args = action == "cocher" ? ["done", projet.id, titre] : ["add", projet.id, titre]
+                var args: [String]
+                switch action {
+                case "cocher": args = ["done", projet.id, titre]
+                case "supprimer":
+                    // Bouton poubelle (09/11/2026) : id exact de Rappels quand la page le donne, sinon titre exact.
+                    args = ["suppr", projet.id, titre]
+                    if let id = o["id"] as? String, id.hasPrefix("x-apple-reminder://"), id.count < 200,
+                       !id.contains(where: { $0.isNewline }) { args += ["--id", id] }
+                default: args = ["add", projet.id, titre]
+                }
                 journal("todo : \(args[0]) \(projet.id) « \(extrait(titre, 80)) »")
                 let r = lancer(args, delai: delaiEcriture)
                 if r.code == 0 && !r.delaiDepasse {
                     rendre(["ok": true, "message": r.sortie.trimmingCharacters(in: .whitespacesAndNewlines)])
                 } else {
-                    let defaut = action == "cocher" ? "Impossible de cocher la tâche." : "Impossible d'ajouter la tâche."
+                    let defaut = action == "cocher" ? "Impossible de cocher la tâche."
+                        : action == "supprimer" ? "Impossible de supprimer la tâche." : "Impossible d'ajouter la tâche."
                     rendre(["ok": false, "erreur": messageErreur(r, defaut: defaut)])
                 }
             }

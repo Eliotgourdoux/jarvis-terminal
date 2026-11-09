@@ -24,6 +24,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         journal("lancement (pid \(getpid()), \(Bundle.main.bundlePath))")
         PiloteDev.demarrer()   // tests d'intégration seulement : ne fait rien sans BT_DEV_PILOTE
         MoteurVocal.shared.demarrer()   // mode Jarvis : raccourci global, écoute mains libres, état mémorisé
+        // Sessions du Victus (ssh victus ultron-terminal relais) : rien si ssh victus n'est pas configuré.
+        if !PiloteDev.actif || ProcessInfo.processInfo.environment["BT_VICTUS_RELAIS"] != nil { VictusLien.shared.demarrer() }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+            VictusLien.shared.reveil()
+        }
         switch commande {
         case .session(let d): Entrees.ouvrir(d)
         case .url(let u): Entrees.traiter(u)
@@ -108,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Menus
 
     @objc func nouvelleSession(_ s: Any?) { Entrees.choisirDossier() }
+    @objc func nouvelleDiscussion(_ s: Any?) { Entrees.nouvelleDiscussion() }
 
     @objc func rechargerPage(_ s: Any?) {
         FenetrePrincipale.shared.selection?.recharger()
@@ -144,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
         menu("Fichier", [
             item("Nouvelle session…", #selector(nouvelleSession(_:)), "n", cible: self),
+            item("Nouvelle discussion", #selector(nouvelleDiscussion(_:)), "n", [.command, .shift], cible: self),
             .separator(),
             item("Fermer la session", #selector(fermerSession(_:)), "w", cible: self),
         ])

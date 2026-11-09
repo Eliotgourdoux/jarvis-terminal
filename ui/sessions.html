@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<title>Sessions</title>
+<link rel="stylesheet" href="css/sessions.css">
+</head>
+<body>
+<!-- 28 px en haut : les feux macOS et la bande de déplacement de la coque. Rien de cliquable. -->
+<div class="faux-feux" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="tete">
+  <span class="tete-titre">Sessions</span>
+  <button type="button" id="discussion" class="nouvelle" title="Discussion libre, sans projet (⇧⌘N)" aria-label="Nouvelle discussion">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H7l-3 2.5V11H3a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/></svg>
+  </button>
+  <button type="button" id="nouvelle" class="nouvelle" title="Nouvelle session (⌘N)" aria-label="Nouvelle session">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg>
+  </button>
+</header>
+
+<nav id="liste" class="liste" aria-label="Sessions ouvertes"></nav>
+
+<p id="vide" class="vide" hidden>Aucune session ouverte.<br><button type="button" id="nouvelle-vide" class="lien">Ouvrir un projet</button></p>
+
+<footer class="pied">⌘1 à ⌘9 · ⌃Tab pour passer d’une session à l’autre</footer>
+
+<script src="js/sessions.js"></script>
+</body>
+</html>
