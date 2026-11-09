@@ -567,17 +567,8 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   text-align: left; background: transparent; color: var(--texte); font-size: 13.5px; line-height: 1.4; cursor: pointer;
 }
 .popover-ligne:hover, .popover-ligne:focus-visible { background: var(--surface-3); outline: none; }
-/* Compacter : icône seule à côté des jetons ; le texte revient quand il demande confirmation. */
-#bt-compacter .libelle { display: none; }
-#bt-compacter .icone-court { display: block; }
-#bt-compacter { padding: 0 8px; }
-#bt-compacter.arme .libelle { display: inline; }
-#bt-compacter.arme .icone-court { display: none; }
-#bt-compacter.arme { padding: 0 12px; }
-.popover-court { width: min(330px, calc(100vw - 24px)); }
-.popover-court .popover-texte { -webkit-line-clamp: unset; display: block; }
-.popover-sous { font-size: 12px; color: var(--faint); }
-.chevron-barre { width: 11px; height: 11px; margin-left: -2px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+/* Compacter : dans la saisie, à côté de Mode Jarvis. */
+.saisie-bas #bt-compacter { height: 30px; box-sizing: border-box; }
 .popover-heure { flex: none; padding-top: 1px; font: 12px var(--police-code); color: var(--faint); }
 .popover-texte { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .popover-vide { padding: 10px 12px; color: var(--faint); font-size: 13px; }
@@ -627,25 +618,37 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 .barre { flex-wrap: wrap; row-gap: 6px; }
 .barre-projet { flex: 0 1 auto; min-width: 0; }
 .barre-nom { min-width: 0; }
-@media (max-width: 1360px) {
+@media (max-width: 1600px) {
   .barre-choix-nom { display: none; }
   .barre-choix { padding-left: 4px; }
-}
-@media (max-width: 1240px) {
   #bt-mes-messages .libelle { display: none; }
   #bt-mes-messages .icone-court { display: block; }
-
-  #bt-jarvis .libelle { display: none; }
-  #bt-jarvis .libelle-court { display: inline; }
-  /* Terminal et Fermer passent en icônes, pour tenir sur une ligne. Fermer armé redonne son texte. */
-  #bt-terminal .libelle, #bt-fermer .libelle { display: none; }
-  #bt-terminal .icone-court, #bt-fermer .icone-court { display: block; }
-  #bt-terminal, #bt-fermer { padding: 0 8px; }
+}
+@media (max-width: 1400px) {
+  /* Les deux boutons Terminal et Fermer passent en icônes. Fermer armé redonne son texte. */
+  #bt-shell .libelle, #bt-terminal .libelle, #bt-fermer .libelle { display: none; }
+  #bt-shell .icone-court, #bt-terminal .icone-court, #bt-fermer .icone-court { display: block; }
+  #bt-shell, #bt-terminal, #bt-fermer { padding: 0 8px; }
   #bt-fermer.arme .libelle { display: inline; }
   #bt-fermer.arme .icone-court { display: none; }
   #bt-fermer.arme { padding: 0 12px; }
 }
+@media (max-width: 1240px) {
+  #bt-jarvis .libelle { display: none; }
+  #bt-jarvis .libelle-court { display: inline; }
+}
+@media (max-width: 1180px) {
+  /* Le levier montre le cran ; la valeur exacte reste dans l'infobulle et dans le panneau. */
+  .barre-choix.avec-levier .choix-valeur { display: none; }
+  .barre-choix.avec-levier .choix-bouton { padding: 0 20px 0 0; }
+}
 @media (max-width: 920px) {
+  #bt-compacter .libelle { display: none; }
+  #bt-compacter .icone-court { display: block; }
+  #bt-compacter { padding: 0 8px; }
+  #bt-compacter.arme .libelle { display: inline; }
+  #bt-compacter.arme .icone-court { display: none; }
+  #bt-compacter.arme { padding: 0 12px; }
   #barre-etat-texte, #barre-vocal-texte, #bt-jarvis .libelle-court { display: none; }
   .barre-etat { padding: 5px; margin-left: 0; }
   .barre-vocal { padding: 4px 6px; }

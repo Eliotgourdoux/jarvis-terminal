@@ -41,31 +41,9 @@
     this.selModele.addEventListener('change', function () { ajusterLargeur(self.selModele); s.changerModele(self.selModele.value); });
     this.selEffort.addEventListener('change', function () { ajusterLargeur(self.selEffort); s.changerEffort(self.selEffort.value); });
     this.selPermission.addEventListener('change', function () { ajusterLargeur(self.selPermission); s.changerPermission(self.selPermission.value); });
-    // Terminal : petit menu, ouvrir un shell dans le dossier (Claude continue) ou passer la session au terminal.
-    var btTerm = $('bt-terminal'), menuTerm = $('menu-terminal');
-    function fermerMenuTerm() { menuTerm.hidden = true; btTerm.classList.remove('actif'); btTerm.setAttribute('aria-expanded', 'false'); }
-    btTerm.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (!menuTerm.hidden) { fermerMenuTerm(); return; }
-      var rb = btTerm.getBoundingClientRect();
-      menuTerm.style.right = Math.max(10, window.innerWidth - rb.right) + 'px';
-      menuTerm.hidden = false;
-      btTerm.classList.add('actif'); btTerm.setAttribute('aria-expanded', 'true');
-      menuTerm.querySelector('button').focus({ preventScroll: true });
-    });
-    menuTerm.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-action]');
-      if (!b) return;
-      fermerMenuTerm();
-      BT.pont.envoyer(b.dataset.action, {});
-    });
-    document.addEventListener('click', function (e) { if (!menuTerm.hidden && !menuTerm.contains(e.target)) fermerMenuTerm(); });
-    document.addEventListener('keydown', function (e) {
-      if (menuTerm.hidden) return;
-      var l = Array.prototype.slice.call(menuTerm.querySelectorAll('button')), i = l.indexOf(document.activeElement);
-      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); fermerMenuTerm(); btTerm.focus(); }
-      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); l[(i + (e.key === 'ArrowDown' ? 1 : l.length - 1)) % l.length].focus(); }
-    }, true);
+    // Terminal : deux boutons. Ouvrir un shell dans le dossier (Claude continue ici), ou passer la session au terminal.
+    $('bt-shell').addEventListener('click', function () { BT.pont.envoyer('ouvrirShell', {}); });
+    $('bt-terminal').addEventListener('click', function () { BT.pont.envoyer('ouvrirTerminal', {}); });
 
     // Compacter (/compact) : deux clics, comme Fermer, pour qu'un clic égaré ne résume pas la conversation.
     var compacter = $('bt-compacter'), armeC = 0;

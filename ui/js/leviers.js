@@ -73,6 +73,7 @@
     var touche = false;                              // l'utilisateur a déplacé le pouce
     var enAttente = 0;
 
+    var mini = !!rappels.mini;   // levier posé directement dans la barre : pas d'en-tête ni de choix hors échelle
     var panneau = div('choix-menu levier-panneau');
     panneau.setAttribute('role', 'dialog');
     panneau.setAttribute('aria-label', titre);
@@ -113,6 +114,7 @@
       return l;
     });
     levier.appendChild(libelles);
+    if (mini) levier.classList.add('levier-mini');
     panneau.appendChild(levier);
 
     // Choix hors échelle : « Par défaut » et, pour le modèle, les autres versions. Mêmes lignes que l'ancien menu.
@@ -124,7 +126,7 @@
         Array.prototype.forEach.call(nd.children, function (o) { hors.push({ option: o }); });
       } else if (indexDe(nd.value) < 0) hors.push({ option: nd });
     });
-    if (hors.length) {
+    if (hors.length && !mini) {
       var bas = div('levier-hors');
       hors.forEach(function (h) {
         if (h.groupe) { bas.appendChild(div('choix-groupe', h.groupe)); return; }
@@ -152,6 +154,7 @@
       var t = actif ? crans[i].libelle : texteChoisi(sel);
       levier.setAttribute('aria-valuetext', t);
       valeur.textContent = t;
+      if (mini) levier.title = titre + ' : ' + t + '. Glisse ou clique un cran pour changer.';
       valeur.classList.toggle('change', actif && crans[i].value !== sel.value);
     }
     function plusProche(i) {
@@ -249,7 +252,8 @@
 
     dessiner();
     return {
-      noeud: panneau,
+      noeud: mini ? levier : panneau,
+      glisse: function () { return !!glisse || !!enAttente; },
       focus: function () { levier.focus({ preventScroll: true }); },
       /* Fermeture par clic dehors ou perte de focus : un choix au clavier encore en attente est appliqué. */
       avantFermeture: function () { if (enAttente) { clearTimeout(enAttente); appliquerAttente(); } },

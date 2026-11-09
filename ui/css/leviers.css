@@ -1,0 +1,77 @@
+/* Leviers à crans Modèle / Effort (leviers.js), dans le panneau des menus de la barre.
+ * Opaque et sobre : piste fine, crans ronds, pouce rond, une seule couleur d'accent. */
+
+.levier-panneau { width: 340px; padding: 4px; overflow: visible; }
+
+.levier-tete {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 8px 10px 0;
+}
+.levier-titre { font: 500 12px var(--police); color: var(--faint); }
+.levier-valeur { font: 600 13px var(--police); color: var(--texte); white-space: nowrap; }
+.levier-valeur.change { color: var(--accent); }
+
+/* Zone sensible plus haute que la piste : on attrape le levier sans viser au pixel. */
+.levier {
+  position: relative; padding: 16px 32px 10px; border-radius: 6px;
+  cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.levier:focus { outline: none; }
+
+.levier-piste { position: relative; height: 2px; border-radius: 1px; background: var(--bord-fort); }
+.levier-rempli {
+  position: absolute; left: 0; top: 0; height: 2px; width: 0; border-radius: 1px;
+  background: var(--accent); transition: width .1s ease-out;
+}
+
+.levier-cran {
+  position: absolute; top: 1px; width: 6px; height: 6px; margin: -5px 0 0 -5px;
+  border-radius: 50%; border: 2px solid var(--bord-fort); background: var(--surface);
+}
+.levier-cran.atteint { border-color: var(--accent); }
+.levier-cran.actif { background: var(--accent); }
+.levier-cran.indispo { opacity: .35; }
+
+.levier-pouce {
+  position: absolute; top: 1px; width: 16px; height: 16px; margin: -10px 0 0 -10px;
+  border-radius: 50%; border: 2px solid var(--surface); background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 1px 4px rgba(0,0,0,.5);
+  transition: left .1s ease-out; cursor: grab;
+}
+.levier.glisse .levier-pouce { cursor: grabbing; }
+/* Valeur hors échelle (« Par défaut », autre version) : pouce en creux posé sur le cran équivalent. */
+.levier.neutre .levier-pouce { background: var(--surface); box-shadow: 0 0 0 2px var(--dim), 0 1px 4px rgba(0,0,0,.5); }
+.levier.vide .levier-pouce { display: none; }
+.levier:focus-visible .levier-pouce { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.levier-libelles { position: relative; height: 16px; margin-top: 14px; }
+.levier-libelle {
+  position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap;
+  font: 500 12px var(--police); color: var(--faint);
+}
+.levier-libelle.actif { color: var(--accent); font-weight: 600; }
+.levier-libelle.repere { color: var(--dim); }
+.levier-libelle.indispo { opacity: .4; }
+.levier:hover .levier-libelle:not(.actif):not(.indispo) { color: var(--dim); }
+
+/* « Par défaut » et autres versions : mêmes lignes que l'ancien menu, sous un filet. */
+.levier-hors { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--bord); }
+.levier-hors > .choix-groupe:first-child { border-top: 0; margin-top: 0; }
+
+/* Levier posé dans la barre (menus.js) : piste courte, crans et pouce plus petits, sans libellés.
+ * La valeur reste écrite à côté, dans le bouton qui ouvre le panneau complet. */
+.barre-choix.avec-levier { padding-left: 10px; gap: 0; }
+.levier.levier-mini { padding: 9px 9px; border-radius: 5px; }
+.levier-mini .levier-piste { width: 58px; }
+#choix-effort ~ .levier-mini .levier-piste { width: 72px; }
+.levier-mini .levier-libelles { display: none; }
+.levier-mini .levier-cran { width: 4px; height: 4px; margin: -4px 0 0 -4px; }
+.levier-mini .levier-pouce { width: 10px; height: 10px; margin: -7px 0 0 -7px; }
+.levier-mini:focus-visible { box-shadow: 0 0 0 1px var(--accent); }
+.levier-mini:focus-visible .levier-pouce { outline: none; }
+.levier-mini.inactif { pointer-events: none; opacity: .4; }
+.barre-choix.avec-levier .choix-bouton { padding-left: 4px; }
+/* Avec le levier, « Modèle » et « Effort » se lisent d'eux-mêmes : on garde la place pour la barre. */
+.barre-choix.avec-levier .barre-choix-nom { display: none; }
+/* Valeur à largeur fixe (menus.js la cale sur l'option la plus longue) : rien ne bouge quand elle change. */
+.barre-choix .choix-valeur { display: inline-block; max-width: 150px; text-align: left; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }

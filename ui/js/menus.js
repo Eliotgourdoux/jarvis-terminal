@@ -21,8 +21,44 @@
     cadre.appendChild(b);
     var menu = null, levier = null;
     var genre = BT.Leviers && BT.Leviers.GENRES[sel.id];
+    if (genre) cadre.classList.add('avec-levier');
 
-    function sync() { var t = texteChoisi(sel); if (v.textContent !== t) v.textContent = t; b.disabled = sel.disabled; }
+    /* Levier posé directement dans la barre (09/11/2026, demande d'Eliot) : on change Modèle et Effort sans ouvrir de menu.
+     * Le bouton à côté ouvre toujours le panneau complet (Par défaut, autres versions). Reconstruit quand le select change. */
+    var mini = null, signature = '';
+    function signatureSel() {
+      return sel.value + '|' + sel.disabled + '|' + Array.prototype.map.call(sel.options, function (o) { return o.value + (o.disabled ? '-' : '') + o.textContent; }).join(',');
+    }
+    function majMini() {
+      if (!genre || !BT.Leviers) return;
+      var sig = signatureSel();
+      if (mini && sig === signature) return;
+      if (mini && mini.glisse()) return;   // on attend la fin du geste
+      signature = sig;
+      var avait = mini && mini.noeud.contains(document.activeElement);
+      var nouveau = BT.Leviers.creer(genre, sel, { mini: true, choisir: appliquer, appliquer: appliquer, fermer: function () {} });
+      nouveau.noeud.addEventListener('click', function (e) { e.preventDefault(); });   // le <label> ne doit pas activer le select
+      if (sel.disabled) nouveau.noeud.classList.add('inactif');
+      if (mini) cadre.replaceChild(nouveau.noeud, mini.noeud); else cadre.insertBefore(nouveau.noeud, b);
+      mini = nouveau;
+      if (avait) mini.focus();
+    }
+    /* Largeur fixe de la valeur, calée sur l'option la plus longue : changer de modèle ou d'effort
+     * ne doit pas faire bouger les leviers de la barre sous le curseur (demande d'Eliot, 09/11/2026). */
+    var mesure = document.createElement('canvas').getContext('2d'), cleLargeur = '';
+    function caleLargeur() {
+      var textes = Array.prototype.map.call(sel.options, function (o) { return o.textContent; });
+      var cle = textes.join('|');
+      if (cle === cleLargeur || !v.isConnected) return;
+      var st = getComputedStyle(v);
+      if (!st.fontSize) return;
+      cleLargeur = cle;
+      mesure.font = st.fontWeight + ' ' + st.fontSize + ' ' + st.fontFamily;
+      var max = 0;
+      textes.forEach(function (t) { max = Math.max(max, mesure.measureText(t).width); });
+      v.style.minWidth = Math.min(150, Math.ceil(max) + 1) + 'px';
+    }
+    function sync() { var t = texteChoisi(sel); if (v.textContent !== t) v.textContent = t; b.disabled = sel.disabled; caleLargeur(); majMini(); }
     function fermer() {
       if (!menu) return;
       if (levier) { var l = levier; levier = null; l.avantFermeture(); }
