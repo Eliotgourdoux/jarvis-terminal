@@ -15,6 +15,8 @@
   // Mode vocal : les mots d'Eliot apparaissent en direct pendant qu'il parle (bt.vocalDirect).
   app.vocalDirect = BT.VocalDirect ? new BT.VocalDirect(app) : null;
   // La mascotte vit dans la marge de gauche, hors du fil : une seule pour toute la session.
+  // Scène persistante du mode vocal (```html apercu scene=nom```), figée en haut du fil (js/scene.js).
+  app.scene = BT.Scene ? new BT.Scene(app) : null;
   app.mascotte = new BT.Mascotte(session);
   document.body.appendChild(app.mascotte.el);
 
@@ -54,12 +56,38 @@
       if (it) app.defilement.allerEnBas();
       return !!it;
     },
+    // Démon du Victus : prompt de lancement ou ordre de Jarvis, à envoyer par cette page.
+    texteAEnvoyer: function (d) {
+      var it = d && session.envoyerMessage(String(d.texte || ''), d.source || 'externe');
+      if (it) app.defilement.allerEnBas();
+      return !!it;
+    },
+    // Message écrit sur une autre page de la même session (le Mac ou le Victus) : on l'affiche sans le renvoyer.
+    utilisateurAilleurs: function (d) {
+      var o; try { o = JSON.parse(d && d.ligne); } catch (e) { return false; }
+      var c = o && o.message && o.message.content, texte = '', images = [];
+      if (typeof c === 'string') texte = c;
+      else if (Array.isArray(c)) c.forEach(function (p) {
+        if (p && p.type === 'text') texte += (texte ? '\n' : '') + p.text;
+        else if (p && p.type === 'image' && p.source && p.source.type === 'base64') images.push('data:' + p.source.media_type + ';base64,' + p.source.data);
+      });
+      if (BT.CONSIGNE_VOCALE) texte = texte.replace('\n\n' + BT.CONSIGNE_VOCALE, '');
+      if (!texte.trim() && !images.length) return false;
+      var src = d.source === 'mac' ? 'le Mac' : d.source === 'victus' ? 'le Victus' : (d.source || 'externe');
+      var it = session._ajouter({ genre: 'eliot', texte: texte, enFile: session.travaille, source: src,
+        commande: /^\/[^\s/]/.test(texte), images: images.length ? images : null });
+      if (it && o.uuid) it.uuid = o.uuid;
+      session._debutTravail();
+      app.defilement.allerEnBas();
+      return true;
+    },
     vocalEtat: function (d) { session.definirVocal(d); },
     fichiers: function (d) { app.interface.recevoirFichiers(d); },
     dictee: function (d) { if (app.interface.recevoirDictee) app.interface.recevoirDictee(d); },
     todo: function (d) { if (BT.todo) BT.todo.recevoir(d); },
     agents: function (l) { if (app.agents) app.agents.recevoir(l); },
     vocalDirect: function (d) { if (app.vocalDirect) app.vocalDirect.recevoir(d); },
+    vocalEtape: function (d) { if (BT.apercuEtape) BT.apercuEtape(d); },
     transcription: function (d) {
       // La bulle fantôme des mots en direct cède sa place à la vraie bulle, sans doublon ni saut.
       var direct = app.vocalDirect && app.vocalDirect.avantTranscription(d);

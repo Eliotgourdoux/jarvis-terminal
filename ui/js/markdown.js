@@ -24,6 +24,17 @@
     return BT.medias.normaliser(d);
   }
 
+  /* Chaîne d'info d'une fence (« html apercu scene=archi ») → { genre, apercu, scene, jarvis }. */
+  function infoFence(lang) {
+    var s = String(lang || '').trim(), g = (/^\S+/.exec(s) || [''])[0];
+    var sc = /(?:^|\s)sc[eè]ne\s*=\s*["']?([\w-]{1,40})/i.exec(s);
+    return {
+      genre: g, jarvis: /^jarvis$/i.test(g), scene: sc ? sc[1].toLowerCase() : null,
+      apercu: /^\S+\s+.*\b(apercu|aperçu|preview|rendu|render)\b/i.test(s)
+    };
+  }
+  BT.infoFence = infoFence;
+
   var pret = !!(window.marked && window.DOMPurify);
   if (pret) {
     window.marked.use({
@@ -34,10 +45,13 @@
         html: function (tok) { return echapper(tok.text || tok.raw || ''); }
       },
       // « ```html apercu » (ou aperçu, preview) : Claude demande l'aperçu d'office (js/apercu.js).
+      // « scene=nom » : aperçu nommé, la scène persistante du mode vocal (js/scene.js) → « html-apercu--scene--nom ».
+      // « ```jarvis scene=nom » : commande pour une scène existante → « jarvis--scene--nom », replié.
       walkTokens: function (t) {
         if (t.type !== 'code' || !t.lang) return;
-        var m = /^(\S+)\s+.*\b(apercu|aperçu|preview|rendu|render)\b/i.exec(t.lang);
-        if (m) t.lang = m[1] + '-apercu';
+        var info = infoFence(t.lang);
+        if (info.jarvis) { t.lang = 'jarvis' + (info.scene ? '--scene--' + info.scene : ''); return; }
+        if (info.apercu || info.scene) t.lang = info.genre + '-apercu' + (info.scene ? '--scene--' + info.scene : '');
       }
     });
 
@@ -155,6 +169,8 @@
     return !!(o && f && f[1].charAt(0) === o[1].charAt(0) && f[1].length >= o[1].length);
   }
 
+  BT.fenceFermee = fenceFermee;
+
   function morceauxVisuels(md, enCours) {
     if (!pret || !window.marked.lexer) return [];
     var toks;
@@ -184,6 +200,13 @@
       if (t.type === 'code') {
         var ouvert = t.codeBlockStyle !== 'indented' && !fenceFermee(t.raw);
         if (t.codeBlockStyle === 'indented') { res.push(t.raw.replace(/\s+$/, '')); return; }
+        // Scène nommée : affichée en haut du fil (js/scene.js) ; ici, un simple renvoi. Commande jarvis : jamais affichée.
+        var inf = infoFence(t.lang);
+        if (inf.jarvis) return;
+        if (inf.scene && BT.genreApercu && BT.genreApercu(inf.genre)) {
+          if (!ouvert) res.push('```scene-ici--scene--' + inf.scene + '\n' + t.text + '\n```');
+          return;
+        }
         res.push('```' + (t.lang || '') + '\n' + t.text + (ouvert ? '' : '\n```'));
         return;
       }
@@ -221,6 +244,35 @@
     return frag;
   };
 
+  /* Bloc ```jarvis scene=nom``` hors mode vocal : replié derrière une ligne (il ne sert qu'à la scène). */
+  function replierJarvis(bloc, scene) {
+    var d = document.createElement('details');
+    d.className = 'bloc-jarvis';
+    var s = document.createElement('summary');
+    s.textContent = 'Commande pour la scène' + (scene ? ' « ' + scene + ' »' : '');
+    bloc.parentNode.replaceChild(d, bloc);
+    d.appendChild(s);
+    d.appendChild(bloc);
+  }
+
+  /* Tour vocal : la scène s'affiche en haut du fil ; à sa place, une ligne qui permet de revoir cette version. */
+  function renvoiScene(nom, code) {
+    var d = document.createElement('div');
+    d.className = 'scene-renvoi';
+    var t = document.createElement('span');
+    t.textContent = 'Scène « ' + (nom || 'sans nom') + ' » affichée en haut';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'scene-renvoi-voir';
+    b.textContent = 'Voir cette version';
+    b.addEventListener('click', function () {
+      if (BT.agrandirApercu && BT.documentApercu) BT.agrandirApercu(BT.documentApercu(code, 'html'), 'Scène « ' + (nom || '') + ' »');
+    });
+    d.appendChild(t);
+    d.appendChild(b);
+    return d;
+  }
+
   function retoucher(frag, dernierOuvert, enCours) {
     // Blocs de code
     var pres = frag.querySelectorAll('pre');
@@ -230,9 +282,12 @@
       if (!code) { code = document.createElement('code'); code.textContent = pre.textContent; pre.textContent = ''; pre.appendChild(code); }
       var m = /(?:^|\s)language-([\w+#.-]+)/.exec(code.className || '');
       var lang = m ? m[1] : '';
+      var scene = null, ms = /--scene--([\w-]+)$/.exec(lang);
+      if (ms) { scene = ms[1]; lang = lang.slice(0, ms.index); }
       var demande = /-apercu$/.test(lang);
       if (demande) lang = lang.replace(/-apercu$/, '');
       code.textContent = code.textContent.replace(/\n$/, '');
+      if (lang === 'scene-ici') { pre.parentNode.replaceChild(renvoiScene(scene, code.textContent), pre); continue; }
       var bloc = BT.blocCode('', lang, { colorer: false });
       var nouveauCode = bloc.querySelector('code');
       nouveauCode.textContent = code.textContent;
@@ -240,7 +295,9 @@
       var ouvert = dernierOuvert && i === pres.length - 1;
       if (lang && !ouvert) BT.colorerCode(nouveauCode, lang);
       if (ouvert) bloc.classList.add('en-cours');
+      else if (lang === 'jarvis') replierJarvis(bloc, scene);
       else if (!enCours && BT.equiperApercu) BT.equiperApercu(bloc, nouveauCode.textContent, lang, demande);
+      if (scene) bloc.setAttribute('data-scene', scene);
     }
     // Tableaux : conteneur défilant horizontalement
     var tables = frag.querySelectorAll('table');

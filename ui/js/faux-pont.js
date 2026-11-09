@@ -23,6 +23,7 @@
  *              dicter=<texte>   à la fin de l'enregistrement, Eliot dicte ce message
  *              vocalEtat=ecoute|parle|transcription|pret  état figé (captures), avec enLigne=1 pour cette session
  *              raccourci=⌥Espace  raccourci affiché dans les aides
+ *              attendreVoix=1   le message suivant attend la fin de la voix (étapes [[n]] simulées à ~60 ms par caractère)
  *   Console : BT.fauxPont.dicter('deux') répond à la dernière question lue ; BT.fauxPont.vocaux = messages reçus ;
  *              BT.fauxPont.parler('texte', { pas: 250, annule: 'bruit' }) joue les mots en direct (bt.vocalDirect). */
 (function () {
@@ -86,7 +87,7 @@
           log('question pour Telegram', msg);
           if (TELEGRAM) setTimeout(function () { simulerTelegram(msg); }, 2000);
           break;
-        case 'vocal': case 'vocalAnnule': case 'modeVocal':
+        case 'vocal': case 'vocalAnnule': case 'modeVocal': case 'vocalPret':
           BT.fauxPont.vocaux.push(JSON.parse(JSON.stringify(msg)));
           vocalRecu(msg);
           break;
@@ -101,6 +102,10 @@
       }
     },
     vocaux: [],
+    // Étapes envoyées à la page (repères [[n]]) : { n, cle, t } ; passer() coupe la voix en cours, rejouer() la redit.
+    etapes: [],
+    passer: function () { if (parleVocal) { clearTimeout(minuteurVocal); finParole(); } },
+    rejouer: function () { if (derniereDite && !parleVocal) { fileVocale.unshift(BT.etendre({}, derniereDite, { bloque: false })); suiteVocale(); } },
     /* Eliot dicte : avec questionId (par défaut, la dernière question lue), c'est une réponse. */
     dicter: function (texte, questionId) { dicter(texte, questionId === undefined ? derniereQuestion : questionId); },
     /* Mots en direct seuls (tests) : BT.fauxPont.parler('texte', { pas: 250, annule: 'bruit' }). */
@@ -187,7 +192,9 @@
     var reste = p < sortie.length;
     var attente = VITESSE === 0 ? 0 : 900 / VITESSE;
     if (AUTO && reste) {
-      setTimeout(function () {
+      setTimeout(function suite() {
+        // attendreVoix=1 : le message suivant attend que Jarvis ait fini de parler (captures des étapes, tour par tour).
+        if (P.get('attendreVoix') === '1' && (parleVocal || fileVocale.length)) { setTimeout(suite, 200); return; }
         if (envoyes < utilisateurs.length) envoyerSuivant();
         else { enPause = false; jouer(); } // tour lancé sans message (tâche de fond)
       }, attente);
@@ -317,6 +324,11 @@
       return;
     }
     if (FIGE) return; // état figé pour une capture : on note, on ne joue rien
+    if (m.type === 'vocalPret') {
+      fileVocale.forEach(function (x) { if (x.cle === m.cle) x.bloque = false; });
+      suiteVocale();
+      return;
+    }
     if (m.type === 'vocalAnnule') {
       fileVocale = fileVocale.filter(function (x) { return x.questionId !== m.questionId; });
       if (parleVocal && parleVocal.questionId === m.questionId) { clearTimeout(minuteurVocal); parleVocal = null; etatVocal('pret', false); suiteVocale(); }
@@ -324,23 +336,61 @@
     }
     if (!vocalActif) return;
     if (m.questionId && fileVocale.some(function (x) { return x.questionId === m.questionId && x.texte === m.texte; })) return;
+    m = BT.etendre({}, m);
+    // Repères [[n]] : comme la coque, la voix attend le rendu de l'aperçu du tour (vocalPret), 20 s au plus.
+    if (m.attendre && m.cle && /\[\[\s*\d{1,3}\s*\]\]/.test(m.texte)) {
+      m.bloque = true;
+      setTimeout(function () { if (m.bloque) { log('aperçu pas rendu en 20 s : la voix part'); m.bloque = false; suiteVocale(); } }, 20000);
+    }
     fileVocale.push(m);
     // les questions passent avant les fins de tâche, dans l'ordre d'arrivée
     fileVocale = fileVocale.filter(function (x) { return x.priorite === 'question'; }).concat(fileVocale.filter(function (x) { return x.priorite !== 'question'; }));
     suiteVocale();
   }
 
+  /* « A [[1]] B [[2]] C » → [[0, 'A'], [1, 'B'], [2, 'C']] (même découpage que Synthese.segments). */
+  function segments(t) {
+    var re = /\[\[\s*(\d{1,3})\s*\]\]/g, l = [], n = 0, i = 0, m;
+    while ((m = re.exec(t))) { l.push([n, t.slice(i, m.index).trim()]); n = +m[1]; i = re.lastIndex; }
+    if (!l.length) return null;
+    l.push([n, t.slice(i).trim()]);
+    return l;
+  }
+  var minuteursEtapes = [], derniereDite = null;
+  function etapeVocale(n, cle) {
+    BT.fauxPont.etapes.push({ n: n, cle: cle || null, t: Date.now() });
+    if (window.bt.vocalEtape) window.bt.vocalEtape({ n: n, cle: cle || undefined });
+  }
+
   function suiteVocale() {
     if (parleVocal || !fileVocale.length) return;
-    parleVocal = fileVocale.shift();
+    var k = -1;
+    for (var i = 0; i < fileVocale.length; i++) if (!fileVocale[i].bloque) { k = i; break; }
+    if (k < 0) return;
+    parleVocal = fileVocale.splice(k, 1)[0];
+    derniereDite = parleVocal;
     etatVocal('parle', true, parleVocal.questionId);
-    log('Jarvis dit :', (P.get('projet') || 'Better Terminal For Claude') + ' ' + parleVocal.texte);
-    minuteurVocal = setTimeout(finParole, attente(Math.min(4000, 500 + parleVocal.texte.length * 22)));
+    var segs = segments(parleVocal.texte);
+    log('Jarvis dit :', segs ? segs.map(function (x) { return x[1]; }).join(' ') : parleVocal.texte);
+    if (!segs) { minuteurVocal = setTimeout(finParole, attente(Math.min(4000, 500 + parleVocal.texte.length * 22))); return; }
+    // Rythme de lecture : ~60 ms par caractère ; l'étape n part quand la voix arrive au segment n.
+    var t = 0, cle = parleVocal.cle;
+    parleVocal.derniere = -1; parleVocal.max = 0;
+    segs.forEach(function (sg) {
+      var el = parleVocal;
+      el.max = Math.max(el.max, sg[0]);
+      minuteursEtapes.push(setTimeout(function () { if (el.derniere !== sg[0]) { el.derniere = sg[0]; etapeVocale(sg[0], cle); } }, attente(t)));
+      t += 300 + sg[1].length * 60;
+    });
+    minuteurVocal = setTimeout(finParole, attente(t));
   }
 
   function finParole() {
     var it = parleVocal;
     parleVocal = null;
+    minuteursEtapes.forEach(clearTimeout); minuteursEtapes = [];
+    // Voix coupée ou passée : l'animation finit sur son dernier état, comme la coque.
+    if (it && it.derniere != null && it.derniere >= 0 && it.derniere !== it.max) { it.derniere = it.max; etapeVocale(it.max, it.cle); }
     if (it && it.priorite === 'question' && it.questionId) {
       derniereQuestion = it.questionId;
       if (reponsesVocales.length) { dicter(reponsesVocales.shift(), it.questionId, suiteVocale); return; }

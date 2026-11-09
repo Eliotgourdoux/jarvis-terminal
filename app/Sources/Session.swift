@@ -124,6 +124,7 @@ final class Session {
             relancer(modele: m, effort: e)
         case "ouvrirTerminal": ouvrirTerminal()
         case "ouvrirShell": ouvrirShell()
+        case "reprendreIci": reprendreIci()
         case "fermer": fenetre.fermerFenetre()
         case "copier":
             guard let t = o["texte"] as? String, t.utf8.count <= 20_000_000 else { refuser("copier : texte invalide"); return }
@@ -144,7 +145,16 @@ final class Session {
                 guard let qs = q as? String, Validation.idQuestion(qs) else { refuser("vocal : questionId invalide"); return }
                 qid = qs
             }
-            MoteurVocal.shared.ajouter(de: self, texte: t, priorite: p, questionId: qid)
+            // Repères [[n]] + aperçu en cours d'écriture : `cle` (tour de la page) et `attendre` (voix retenue jusqu'à vocalPret).
+            var cle: String?
+            if let c = o["cle"] as? String {
+                guard Validation.cleVocale(c) else { refuser("vocal : cle invalide"); return }
+                cle = c
+            }
+            MoteurVocal.shared.ajouter(de: self, texte: t, priorite: p, questionId: qid, cle: cle, attendre: (o["attendre"] as? Bool) == true && cle != nil)
+        case "vocalPret":
+            guard let c = o["cle"] as? String, Validation.cleVocale(c) else { refuser("vocalPret : cle invalide"); return }
+            MoteurVocal.shared.apercuPret(de: self, cle: c)
         case "vocalAnnule":
             guard let q = o["questionId"] as? String, Validation.idQuestion(q) else { refuser("vocalAnnule : questionId invalide"); return }
             MoteurVocal.shared.annuler(questionId: q, session: self)
@@ -654,6 +664,63 @@ final class Session {
         } else { suite() }
     }
 
+    /// « Reprendre ici » (12/11/2026) : la session passée dans Terminal (ou terminée) revient dans l'app.
+    /// Le claude lancé dans Terminal sur cette session est arrêté d'abord (SIGTERM, puis SIGKILL après 3 s) :
+    /// jamais deux processus sur la même conversation. Puis reprise `--resume` et page rechargée, pour
+    /// afficher aussi ce qui s'est dit dans Terminal (le transcript est commun).
+    private func reprendreIci() {
+        guard !fermee, Validation.sessionId(sessionId) else { return }
+        if let p = processus, !p.fini, arretVoulu == nil { return }   // déjà piloté par l'app
+        let id = sessionId, monPid = processus?.pid
+        journal("session \(id) : reprendre ici (dans le Terminal : \(dansTerminal))")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let arretes = Session.arreterClaudeExterne(sessionId: id, sauf: monPid)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.fermee else { return }
+                if !arretes.isEmpty { journal("session \(id) : claude du Terminal arrêté (pid \(arretes.map(String.init).joined(separator: ", ")))") }
+                self.dansTerminal = false
+                self.arretVoulu = nil
+                self.demarre = true
+                self.etat = "pret"; self.maj = Date()
+                self.fenetre.marquerDansTerminal()
+                RegistreSessions.shared.signaler(self)
+                let reprise = Transcript.chemin(cwd: self.cwd, sessionId: id) != nil
+                self.lancer(reprise: reprise) { [weak self] in
+                    guard let self else { return }
+                    self.ecrireEtat()
+                    self.fenetre.recharger()
+                }
+            }
+        }
+    }
+
+    /// Arrête les `claude … --resume <id>` lancés hors de l'app (Terminal). Renvoie les pid arrêtés.
+    private static func arreterClaudeExterne(sessionId id: String, sauf: Int32?) -> [Int32] {
+        func pids() -> [Int32] {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            p.arguments = ["-f", "(resume|session-id)[ =]" + id]
+            let sortie = Pipe()
+            p.standardOutput = sortie
+            p.standardError = FileHandle.nullDevice
+            guard (try? p.run()) != nil else { return [] }
+            let d = sortie.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            return String(decoding: d, as: UTF8.self).split(separator: "\n").compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+                .filter { $0 != getpid() && $0 != sauf }
+        }
+        let cibles = pids()
+        guard !cibles.isEmpty else { return [] }
+        cibles.forEach { kill($0, SIGTERM) }
+        for _ in 0..<30 {
+            if pids().isEmpty { return cibles }
+            usleep(100_000)
+        }
+        pids().forEach { kill($0, SIGKILL) }
+        usleep(200_000)
+        return cibles
+    }
+
     /// Interruption du tour en cours, fin de stdin, puis SIGTERM (2 s) et SIGKILL (5 s) au besoin.
     private func arreterProcessus(_ p: ProcessusClaude, _ fini: @escaping () -> Void) {
         p.ecrire(ClaudeArgs.interruption())
@@ -792,7 +859,7 @@ final class Session {
         while message.hasPrefix("-") || message.hasPrefix("[") { message.removeFirst() }   // lu comme option sinon
         let id = sessionId
         Environnement.charger { env in
-            guard let tn = Environnement.trouver("terminal-notifier", env, connus: ["/opt/homebrew/bin/terminal-notifier", "/usr/local/bin/terminal-notifier"])
+            guard let tn = Environnement.notifier(env) ?? Environnement.trouver("terminal-notifier", env, connus: ["/opt/homebrew/bin/terminal-notifier", "/usr/local/bin/terminal-notifier"])
             else { journal("terminal-notifier introuvable"); return }
             DispatchQueue.global().async {
                 let (code, _) = executer(tn, ["-title", titre, "-subtitle", "Claude attend votre réponse", "-message", message,
@@ -866,15 +933,25 @@ final class Session {
         pousserDirect("vocalEtat", e)
     }
 
+    /// Étape de l'animation synchronisée avec la voix : `bt.vocalEtape({n, cle})`.
+    func envoyerVocalEtape(_ n: Int, cle: String?) {
+        guard !fermee else { return }
+        var a: [String: Any] = ["n": n]
+        if let cle { a["cle"] = cle }
+        pousserDirect("vocalEtape", a)
+    }
+
     /// Dictée dans la saisie (Espace maintenu) : état et texte pour la page.
     func pousserDictee(_ d: [String: Any]) { pousser("dictee", d) }
 
     /// Texte dicté pour cette session : `bt.transcription({texte, questionId?})` ; une page qui ne connaît pas
     /// encore cette fonction reçoit le texte comme un message ordinaire (`envoyerTexte`, source « vocal »).
-    func livrerTranscription(_ texte: String, questionId: String?) {
+    /// `suite` : énoncé repris moins de 3 s après l'envoi précédent ; la page le fusionne avec lui si Claude n'a encore rien écrit.
+    func livrerTranscription(_ texte: String, questionId: String?, suite: Bool = false) {
         guard !fermee, !dansTerminal else { return }
         var arg: [String: Any] = ["texte": texte]
         if let q = questionId { arg["questionId"] = q }
+        if suite { arg["suite"] = true }
         guard pagePrete else { envoyerTexte(texte, source: "vocal"); return }
         vider()   // garder l'ordre avec les appels déjà en file
         fenetre.appelerFonction("transcription", arg) { [weak self] ok in

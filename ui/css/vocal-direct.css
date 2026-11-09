@@ -1,0 +1,34 @@
+/* Mode vocal : la bulle « Eliot » fantôme, mots en direct (js/vocal-direct.js). Fond plein, sobre, pas de lueur. */
+
+.vd-fantome { content-visibility: visible; }
+.vd-fantome .vd-bulle {
+  background: var(--surface);
+  border-style: dashed;
+  border-color: #463A78;
+  transition: border-color .25s ease-out, background-color .25s ease-out;
+}
+.vd-fantome.vd-fini .vd-bulle { border-style: solid; background: var(--surface-3); }
+.vd-bulle.vd-anim-h { overflow: hidden; }
+/* Raccord : le fragment repris par la bulle fantôme quitte le fil sans attendre la coupe. */
+#fil > .vd-raccorde { display: none; }
+
+.vd-texte { position: relative; min-height: 1.55em; color: #F4F4F7; }
+.vd-attente { position: absolute; left: 0; top: 0; color: var(--faint); letter-spacing: .08em; }
+.vd-transcrit .vd-texte { color: var(--dim); transition: color .25s ease-out; }
+.vd-fini .vd-texte { color: #F4F4F7; }
+
+.vd-meta { display: inline-flex; align-items: center; gap: 6px; }
+.vd-point { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; transition: background-color .2s ease-out, opacity .2s ease-out; }
+.vd-transcrit .vd-point { background: var(--faint); }
+/* « … j’attends la suite » : Eliot s'est tu, Jarvis patiente. Fixe, sans animation : pastille et libellé atténués. */
+.vd-attend .vd-point { background: var(--accent); opacity: .4; }
+.vd-attend .vd-etat { color: var(--faint); font-style: italic; }
+.vd-fini .vd-point { background: var(--vert); }
+
+@keyframes vd-entre { from { opacity: 0; } to { opacity: 1; } }
+.vd-entre-bulle { animation: vd-entre .18s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vd-entre-bulle { animation: none; }
+  .vd-fantome .vd-bulle, .vd-point, .vd-transcrit .vd-texte { transition: none; }
+}

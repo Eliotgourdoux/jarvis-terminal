@@ -110,3 +110,49 @@ enum Routage {
         }
     }
 }
+
+/// La phrase dictée a-t-elle l'air finie ? (fin d'énoncé intelligente du mode mains libres, 09/11/2026)
+/// Lu sur le texte de whisper-server pendant un silence : inachevée → on attend plus longtemps la suite.
+/// - inachevée : points de suspension, virgule ou deux-points en fin ; dernier mot de liaison (« et », « mais »,
+///   « parce que », « de », « le », « pour », « avec », « euh »…) sauf question ; pas de ponctuation finale ;
+///   très courte (deux mots ou moins), sauf réponse brève connue (« oui », « deux », « vas-y », « d'accord ») ;
+/// - complète sinon (ponctuation finale sur une phrase entière).
+/// Les accents comptent : « là » et « où » finissent une phrase, « la » et « ou » non.
+enum FinPhrase {
+    static let liaisons: Set<String> = [
+        "et", "mais", "ou", "donc", "car", "ni", "or", "que", "qu", "puis", "ensuite", "enfin",
+        "de", "d", "du", "des", "le", "la", "les", "l", "un", "une", "au", "aux", "à", "en",
+        "pour", "avec", "sur", "sous", "dans", "par", "chez", "vers", "entre", "sans", "contre", "comme",
+        "si", "quand", "lorsque", "puisque", "parce", "pendant", "depuis",
+        "mon", "ma", "mes", "ton", "ta", "tes", "son", "sa", "ses", "notre", "votre", "nos", "vos", "leur", "leurs",
+        "ce", "cet", "cette", "ces", "je", "j", "tu", "il", "ils", "on", "me", "m", "te", "t", "se", "s", "ne", "n", "c",
+        "euh", "heu", "hum", "hmm", "bah", "ben", "genre", "style"]
+    static let reponsesBreves: Set<String> = [
+        "oui", "non", "ok", "okay", "ouais", "d", "accord", "merci", "stop", "arrête", "arrete", "go", "vas", "y",
+        "continue", "annule", "parfait", "super", "nickel", "exactement", "voilà", "carrément", "bien", "sûr",
+        "un", "deux", "trois", "quatre", "cinq", "premier", "première", "deuxième", "troisième", "dernier", "dernière",
+        "aucun", "aucune", "tous", "toutes", "le", "la", "l", "les", "approuve", "valide", "refuse", "autorise", "jamais", "toujours"]
+
+    /// Mots en minuscules, accents gardés, coupés aux apostrophes et aux traits d'union.
+    static func mots(_ s: String) -> [String] {
+        s.lowercased().split { !($0.isLetter || $0.isNumber) }.map(String.init)
+    }
+
+    /// nil si la phrase a l'air finie, sinon la raison (pour le journal).
+    static func inachevee(_ texte: String) -> String? {
+        let t = texte.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let fin = t.last else { return "vide" }
+        if t.hasSuffix("...") || t.hasSuffix("…") { return "points de suspension" }
+        if ",;:-–—".contains(fin) { return "virgule en fin" }
+        let m = mots(t)
+        guard let dernier = m.last else { return "vide" }
+        let dernierBrut = t.split(whereSeparator: { $0.isWhitespace }).last.map(String.init) ?? ""
+        // « fais-le », « vas-y » : le trait d'union lie le mot au verbe d'avant, la phrase peut finir là
+        if fin != "?", liaisons.contains(dernier), !dernierBrut.contains("-") { return "mot de liaison « \(dernier) »" }
+        // « non », « d'accord » : réponse brève complète, même sans ponctuation
+        if m.count <= 3, m.allSatisfy({ reponsesBreves.contains($0) }) { return nil }
+        if !".!?".contains(fin) { return "pas de ponctuation finale" }
+        if m.count <= 2, fin == "." { return "très courte" }   // whisper met un point aux bribes
+        return nil
+    }
+}

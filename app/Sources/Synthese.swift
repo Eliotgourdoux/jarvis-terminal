@@ -1,29 +1,51 @@
 import AVFoundation
 
-/// Synthèse vocale avec la voix de Jarvis : edge-tts `fr-FR-RemyMultilingualNeural` (débit +8 %), appelé
-/// comme dans `~/.claude/bin/tg-say.sh`, après nettoyage par `tts-clean.py`. Sans réseau (ou si edge-tts
-/// échoue), repli sur `say` avec une voix française ; après un échec, edge-tts n'est plus essayé pendant 60 s
-/// pour ne pas ajouter son délai d'attente à chaque phrase.
+/// Synthèse vocale avec la voix de Jarvis : edge-tts `fr-FR-RemyMultilingualNeural` (débit réglable, -8 % par défaut),
+/// appelé comme dans `~/.claude/bin/tg-say.sh`, après nettoyage par `tts-clean.py`.
+/// Une seule voix par message (09/11/2026) : le moteur est choisi sur le PREMIER morceau, et tous les morceaux
+/// suivants le gardent. edge-tts répond en 1 à 10 s selon les moments (mesuré : même texte 4 s puis 10 s, quatre
+/// morceaux en parallèle en 1,5 s : c'est la latence du service Microsoft, pas la taille du morceau) ; chaque appel
+/// est donc doublé par une seconde tentative en parallèle s'il traîne, et un morceau suivant n'est JAMAIS lu par `say` :
+/// il est retenté (jusqu'à 25 s), et sauté en dernier recours. `say` ne sert que si edge-tts échoue dès le premier
+/// morceau (pas de réseau), avec la meilleure voix française installée ; edge-tts n'est alors plus essayé pendant 60 s.
 /// La préparation (nettoyage + fichier audio) tourne hors du fil principal ; la lecture, sur le fil principal.
 final class Synthese: NSObject, AVAudioPlayerDelegate {
     static let shared = Synthese()
 
-    struct Audio { let url: URL; let moteur: String; let duree: TimeInterval; let texte: String; var suite: Suite? = nil }
+    /// `etape` : repère `[[n]]` du bloc vocal qui commence avec ce morceau (scène animée, voir MoteurVocal).
+    struct Audio { let url: URL; let moteur: String; let duree: TimeInterval; let texte: String; var suite: Suite? = nil; var etape: Int? = nil }
 
-    /// Morceaux 2..n d'un long texte : synthétisés en arrière-plan pendant que le premier joue (07/11/2026).
+    /// Morceaux 2..n d'un long texte : synthétisés en arrière-plan (en parallèle) pendant que le premier joue.
     /// Accès sur le fil principal uniquement.
     final class Suite {
         var urls: [URL?]
         var echecs: Set<Int> = []
+        var etapes: [Int?]
         var attente: (() -> Void)?
-        init(_ n: Int) { urls = Array(repeating: nil, count: n) }
+        init(_ n: Int) { urls = Array(repeating: nil, count: n); etapes = Array(repeating: nil, count: n) }
         func pret(_ i: Int) -> Bool { urls[i] != nil || echecs.contains(i) }
     }
 
     static let voixEdge = "fr-FR-RemyMultilingualNeural"
     /// Débit edge-tts : réglage `BTDebitVoix` (ex. "-10%"), sinon -8 % (09/11/2026 : Eliot trouvait +8 % trop rapide).
     static var debitEdge: String { Reglages.texte("BTDebitVoix") ?? "-8%" }
-    static var voixSay: String { Reglages.texte("BTVoixSay") ?? "Thomas" }
+    /// Voix de secours : réglage `BTVoixSay`, sinon la meilleure voix française installée.
+    static var voixSay: String { Reglages.texte("BTVoixSay") ?? meilleureVoixSay }
+    /// Premium, puis Enhanced (« Thomas (Enhanced) », « Audrey (Premium) »…), puis Thomas. Lu une fois (`say -v ?`).
+    static let meilleureVoixSay: String = {
+        let (_, out) = executer("/usr/bin/say", ["-v", "?"], delai: 5)
+        var voix: [String] = []
+        for l in out.split(separator: "\n") {
+            guard let r = l.range(of: "^(.+?)\\s+(fr_FR|fr_CA|fr_BE|fr_CH)\\s+#", options: .regularExpression) else { continue }
+            let ligne = String(l[r])
+            let nom = ligne.replacingOccurrences(of: "\\s+fr_[A-Z]{2}\\s+#$", with: "", options: .regularExpression)
+            if ligne.contains("fr_FR") { voix.insert(nom, at: 0) } else { voix.append(nom) }
+        }
+        let choix = voix.first { $0.contains("(Premium)") } ?? voix.first { $0.contains("(Enhanced)") }
+            ?? voix.first { $0.hasPrefix("Thomas") } ?? voix.first ?? "Thomas"
+        journal("voix : voix de secours say → \(choix)")
+        return choix
+    }()
 
     let dossier: URL = {
         let d = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("better-terminal-vocal", isDirectory: true)
@@ -32,6 +54,8 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
     }()
 
     private let file = DispatchQueue(label: "bt.synthese", qos: .userInitiated, attributes: .concurrent)
+    /// Morceaux suivants : au plus 3 appels edge-tts en même temps par message.
+    private let parallele = DispatchSemaphore(value: 3)
     private var edgeEnPanneJusqua = Date.distantPast
     private var cheminEdgeCache: String??
     private let verrou = NSLock()
@@ -41,29 +65,56 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
 
     private var lecteur: AVAudioPlayer?
     private var finLecture: (() -> Void)?
+    /// Rappel quand un morceau marqué d'une étape commence à jouer (repères `[[n]]`).
+    private var surEtape: ((Int) -> Void)?
+
+    /// Puissance moyenne (dBFS) du morceau en train de jouer, nil si rien ne joue (comparaison écho côté écoute).
+    func niveauSortie() -> Float? {
+        guard let l = lecteur, l.isPlaying else { return nil }
+        l.updateMeters()
+        return l.averagePower(forChannel: 0)
+    }
 
     var parle: Bool { lecteur?.isPlaying ?? false }
 
     // MARK: - Préparation
 
     /// Nettoie le texte, fabrique l'audio du PREMIER morceau, puis `fini` sur le fil principal (nil si échec).
-    /// Les morceaux suivants se fabriquent ensuite en arrière-plan : la voix démarre en ~1 s au lieu d'attendre
-    /// la synthèse de tout le texte (5 s et plus sur un long compte rendu).
-    func preparer(_ texte: String, env: [String: String], fini: @escaping (Audio?) -> Void) {
+    /// Les morceaux suivants se fabriquent ensuite en arrière-plan, avec le même moteur.
+    /// `segments` : le texte découpé aux repères `[[n]]` (n, texte) ; chaque segment commence un nouveau morceau,
+    /// marqué de son étape. Sans segments, `texte` est lu d'un bloc.
+    func preparer(_ texte: String, segments: [(Int, String)]? = nil, env: [String: String], fini: @escaping (Audio?) -> Void) {
         file.async { [self] in
             let debut = Date()
-            let propre = nettoyer(texte, env: env)
-            guard !propre.isEmpty else { DispatchQueue.main.async { fini(nil) }; return }
-            let morceaux = Self.decouper(propre)
-            guard var premier = fabriquer(morceaux[0], env: env) else { DispatchQueue.main.async { fini(nil) }; return }
+            var morceaux: [(String, Int?)] = []
+            if let segments {
+                var enAttente: Int?
+                for (n, t) in segments {
+                    enAttente = max(enAttente ?? n, n)
+                    let p = nettoyer(t, env: env)
+                    guard !p.isEmpty else { continue }
+                    for (i, m) in Self.decouper(p).enumerated() { morceaux.append((m, i == 0 ? enAttente : nil)) }
+                    enAttente = nil
+                }
+            } else {
+                let p = nettoyer(texte, env: env)
+                if !p.isEmpty { morceaux = Self.decouper(p).map { ($0, nil) } }
+            }
+            guard !morceaux.isEmpty else { DispatchQueue.main.async { fini(nil) }; return }
+            guard var premier = fabriquer(morceaux[0].0, env: env, moteur: nil) else { DispatchQueue.main.async { fini(nil) }; return }
+            premier.etape = morceaux[0].1
             let total = Date().timeIntervalSince(debut)
-            journal("voix : \(premier.moteur) prêt en \(String(format: "%.2f", total)) s, morceau 1/\(morceaux.count) (« \(extrait(morceaux[0], 80)) »)")
+            journal("voix : \(premier.moteur) prêt en \(String(format: "%.2f", total)) s, morceau 1/\(morceaux.count) (« \(extrait(morceaux[0].0, 80)) »)")
             if morceaux.count > 1 {
                 let suite = Suite(morceaux.count - 1)
+                for (i, m) in morceaux.dropFirst().enumerated() { suite.etapes[i] = m.1 }
                 premier.suite = suite
-                file.async { [self] in
-                    for (i, m) in morceaux.dropFirst().enumerated() {
-                        let a = fabriquer(m, env: env)
+                let moteur = premier.moteur
+                for (i, m) in morceaux.dropFirst().enumerated() {
+                    file.async { [self] in
+                        parallele.wait()
+                        let a = fabriquer(m.0, env: env, moteur: moteur)
+                        parallele.signal()
                         DispatchQueue.main.async {
                             if let a { suite.urls[i] = a.url } else { suite.echecs.insert(i) }
                             let f = suite.attente; suite.attente = nil; f?()
@@ -71,9 +122,33 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
                     }
                 }
             }
-            let resultat = Audio(url: premier.url, moteur: premier.moteur, duree: total, texte: propre, suite: premier.suite)
+            let resultat = Audio(url: premier.url, moteur: premier.moteur, duree: total, texte: morceaux.map { $0.0 }.joined(separator: " "),
+                                 suite: premier.suite, etape: premier.etape)
             DispatchQueue.main.async { fini(resultat) }
         }
+    }
+
+    /// Repères d'étape dans un texte à dire : `[[1]]`, `[[ 2 ]]`. Renvoie nil sans repère, sinon les segments
+    /// (étape 0 = le texte avant le premier repère, éventuellement vide).
+    static func segments(_ t: String) -> [(Int, String)]? {
+        guard let re = try? NSRegularExpression(pattern: "\\[\\[\\s*(\\d{1,3})\\s*\\]\\]") else { return nil }
+        let ns = t as NSString
+        let l = re.matches(in: t, range: NSRange(location: 0, length: ns.length))
+        guard !l.isEmpty else { return nil }
+        var r: [(Int, String)] = []
+        var n = 0, pos = 0
+        for m in l {
+            r.append((n, ns.substring(with: NSRange(location: pos, length: m.range.location - pos))))
+            n = Int(ns.substring(with: m.range(at: 1))) ?? n + 1
+            pos = m.range.location + m.range.length
+        }
+        r.append((n, ns.substring(from: pos)))
+        return r
+    }
+
+    static func sansReperes(_ t: String) -> String {
+        t.replacingOccurrences(of: "\\s*\\[\\[\\s*\\d{1,3}\\s*\\]\\]\\s*", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Phrases regroupées : un premier morceau court (démarrage rapide), puis des morceaux d'environ 260 caractères.
@@ -98,31 +173,94 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
         return morceaux
     }
 
-    /// Un fichier audio pour un morceau : edge-tts, sinon say.
-    private func fabriquer(_ propre: String, env: [String: String]) -> Audio? {
+    /// Un fichier audio pour un morceau. `moteur` nil (premier morceau) : edge-tts, sinon say. "edge" (morceaux
+    /// suivants d'un message commencé en edge) : edge-tts uniquement, retenté, jamais say. Autre : say.
+    private func fabriquer(_ propre: String, env: [String: String], moteur: String?) -> Audio? {
+        let edge = cheminEdge(env)
+        if moteur == "edge" || (moteur == nil && edge != nil && Date() >= enPanneJusqua()) {
+            let t0 = Date()
+            // Premier morceau : seconde tentative à 3,5 s, abandon vers 14 s (alors say pour tout le message).
+            // Morceau suivant : secondes tentatives à 5 s et 13 s, jusqu'à 25 s chacune.
+            let essais: [(TimeInterval, TimeInterval)] = moteur == nil ? [(0, 10), (3.5, 10.5)] : [(0, 12), (5, 25), (13, 25)]
+            if let edge, let mp3 = edgeCourse(propre, exe: edge, env: env, essais: essais) {
+                return Audio(url: mp3, moteur: "edge", duree: Date().timeIntervalSince(t0), texte: propre)
+            }
+            if moteur == "edge" {
+                journal("voix : edge-tts en échec sur un morceau suivant après \(essais.count) tentatives (\(String(format: "%.1f", Date().timeIntervalSince(t0))) s) : morceau sauté (pas de changement de voix)")
+                mettreEnPanne()
+                return nil
+            }
+            mettreEnPanne()
+            journal("voix : edge-tts indisponible (\(String(format: "%.2f", Date().timeIntervalSince(t0))) s) : say pour ce message, edge-tts réessayé dans 60 s")
+        }
         let base = dossier.appendingPathComponent(UUID().uuidString.lowercased())
         let txt = base.appendingPathExtension("txt")
         guard (try? propre.write(to: txt, atomically: true, encoding: .utf8)) != nil else { return nil }
         defer { try? FileManager.default.removeItem(at: txt) }
-        if let edge = cheminEdge(env), Date() >= enPanneJusqua() {
-            let mp3 = base.appendingPathExtension("mp3")
-            var args = ["--voice", Self.voixEdge, "--rate=" + Self.debitEdge, "-f", txt.path, "--write-media", mp3.path]
-            if let p = proxyEdge { args += ["--proxy", p] }
-            let t0 = Date()
-            let (code, _) = executer(edge, args, env: env, delai: 12)
-            let taille = (try? FileManager.default.attributesOfItem(atPath: mp3.path)[.size] as? Int) ?? 0
-            if code == 0, taille > 0 { return Audio(url: mp3, moteur: "edge", duree: Date().timeIntervalSince(t0), texte: propre) }
-            try? FileManager.default.removeItem(at: mp3)
-            mettreEnPanne()
-            journal("voix : edge-tts en échec (code \(code), \(String(format: "%.2f", Date().timeIntervalSince(t0))) s) : repli sur say pendant 60 s")
-        }
         let aiff = base.appendingPathExtension("aiff")
         let t0 = Date()
-        let (code, _) = executer("/usr/bin/say", ["-v", Self.voixSay, "-r", "165", "-f", txt.path, "-o", aiff.path], delai: 20)
+        let voix = Self.voixSay
+        let (code, _) = executer("/usr/bin/say", ["-v", voix, "-f", txt.path, "-o", aiff.path], delai: 20)
         let taille = (try? FileManager.default.attributesOfItem(atPath: aiff.path)[.size] as? Int) ?? 0
-        if code == 0, taille > 0 { return Audio(url: aiff, moteur: "say/" + Self.voixSay, duree: Date().timeIntervalSince(t0), texte: propre) }
+        if code == 0, taille > 0 { return Audio(url: aiff, moteur: "say/" + voix, duree: Date().timeIntervalSince(t0), texte: propre) }
         journal("voix : say en échec (code \(code))")
         return nil
+    }
+
+    /// Plusieurs appels edge-tts décalés (départ, délai max) ; le premier fichier valide l'emporte.
+    /// Une tentative pas encore partie quand une autre a réussi ne part pas ; une tentative en échec rapide
+    /// (pas de réseau) avance le départ de la suivante.
+    private func edgeCourse(_ propre: String, exe: String, env: [String: String], essais: [(TimeInterval, TimeInterval)]) -> URL? {
+        let base = dossier.appendingPathComponent(UUID().uuidString.lowercased())
+        let txt = base.appendingPathExtension("txt")
+        guard (try? propre.write(to: txt, atomically: true, encoding: .utf8)) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: txt) }
+        let v = NSLock()
+        var gagnant: URL?
+        var restants = essais.count
+        var partis = Set<Int>()
+        let signal = DispatchSemaphore(value: 0)
+        let t0 = Date()
+        func lancer(_ i: Int) {
+            v.lock()
+            if partis.contains(i) || gagnant != nil {
+                let deja = partis.contains(i)
+                if !deja { partis.insert(i); restants -= 1 }
+                let fin = !deja && restants == 0
+                v.unlock()
+                if fin { signal.signal() }
+                return
+            }
+            partis.insert(i)
+            v.unlock()
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                let mp3 = base.appendingPathExtension("\(i).mp3")
+                var args = ["--voice", Self.voixEdge, "--rate=" + Self.debitEdge, "-f", txt.path, "--write-media", mp3.path]
+                if let p = proxyEdge { args += ["--proxy", p] }
+                let t = Date()
+                let (code, _) = executer(exe, args, env: env, delai: essais[i].1)
+                let taille = (try? FileManager.default.attributesOfItem(atPath: mp3.path)[.size] as? Int) ?? 0
+                let ok = code == 0 && taille > 0
+                v.lock()
+                var garde = false
+                if ok && gagnant == nil { gagnant = mp3; garde = true }
+                restants -= 1
+                let fin = garde || restants == 0
+                v.unlock()
+                if !garde { try? FileManager.default.removeItem(at: mp3) }
+                if !ok { journal("voix : edge-tts tentative \(i + 1)/\(essais.count) en échec (code \(code), \(String(format: "%.2f", Date().timeIntervalSince(t))) s)") }
+                else if i > 0, garde { journal("voix : edge-tts gagné par la tentative \(i + 1) (\(String(format: "%.2f", Date().timeIntervalSince(t0))) s)") }
+                if !ok, i + 1 < essais.count { lancer(i + 1) }
+                if fin { signal.signal() }
+            }
+        }
+        for i in essais.indices {
+            if essais[i].0 <= 0 { lancer(i) }
+            else { DispatchQueue.global().asyncAfter(deadline: .now() + essais[i].0) { lancer(i) } }
+        }
+        signal.wait()
+        v.lock(); let g = gagnant; v.unlock()
+        return g
     }
 
     private func enPanneJusqua() -> Date { verrou.lock(); defer { verrou.unlock() }; return edgeEnPanneJusqua }
@@ -180,13 +318,15 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
 
     /// Joue l'audio puis les morceaux de sa suite ; `fini` à la fin naturelle uniquement (pas après `arreter`).
     @discardableResult
-    func jouer(_ a: Audio, volume: Float, fini: @escaping () -> Void) -> Bool {
+    func jouer(_ a: Audio, volume: Float, surEtape: ((Int) -> Void)? = nil, fini: @escaping () -> Void) -> Bool {
         arreter()
         guard jouerURL(a.url, volume: volume, moteur: a.moteur) else { return false }
         finLecture = fini
         suiteCourante = a.suite
         indexSuite = 0
         volumeCourant = volume
+        self.surEtape = surEtape
+        if let n = a.etape { surEtape?(n) }
         return true
     }
 
@@ -195,6 +335,7 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
             let l = try AVAudioPlayer(contentsOf: url)
             l.delegate = self
             l.volume = volume
+            l.isMeteringEnabled = true
             l.prepareToPlay()
             guard l.play() else { journal("voix : lecture refusée"); return false }
             lecteur = l
@@ -209,7 +350,10 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
     /// Morceau suivant de la suite : joué s'il est prêt, sinon on l'attend (rappel quand il arrive).
     private func continuerSuite() {
         guard let s = suiteCourante, finLecture != nil else { return }
-        while indexSuite < s.urls.count, s.echecs.contains(indexSuite) { indexSuite += 1 }
+        while indexSuite < s.urls.count, s.echecs.contains(indexSuite) {   // morceau sauté : son étape part quand même
+            if let n = s.etapes[indexSuite] { surEtape?(n) }
+            indexSuite += 1
+        }
         guard indexSuite < s.urls.count else { terminerLecture(); return }
         guard let u = s.urls[indexSuite] else {
             s.attente = { [weak self, weak s] in
@@ -218,13 +362,17 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
             }
             return
         }
+        let etape = s.etapes[indexSuite]
         indexSuite += 1
-        if !jouerURL(u, volume: volumeCourant, moteur: "suite") { continuerSuite() }
+        let ok = jouerURL(u, volume: volumeCourant, moteur: "suite")
+        if let n = etape { surEtape?(n) }
+        if !ok { continuerSuite() }
     }
 
     private func terminerLecture() {
         let f = finLecture
         finLecture = nil
+        surEtape = nil
         lecteur = nil
         suiteCourante = nil
         f?()
@@ -232,6 +380,7 @@ final class Synthese: NSObject, AVAudioPlayerDelegate {
 
     func arreter() {
         finLecture = nil
+        surEtape = nil
         suiteCourante?.attente = nil
         suiteCourante = nil
         if let l = lecteur { l.delegate = nil; l.stop() }

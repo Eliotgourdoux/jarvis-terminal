@@ -108,6 +108,8 @@ enum Validation {
     }
     /// Identifiant de question : court (callback_data Telegram ≤ 64 octets), sûr comme nom de fichier.
     static func idQuestion(_ s: String) -> Bool { correspond(s, "^[A-Za-z0-9_-]{1,32}$") }
+    /// Tour de la page pour les étapes vocales (`vocal.cle`, `vocalPret`).
+    static func cleVocale(_ s: String) -> Bool { correspond(s, "^[A-Za-z0-9_-]{1,64}$") }
 
     /// Dossier de travail : chemin absolu (~ accepté) d'un dossier existant, rendu canonique.
     static func dossier(_ brut: String) -> String? {

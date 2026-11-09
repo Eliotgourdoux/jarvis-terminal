@@ -5,9 +5,15 @@
  * pendant un énoncé (mains libres ou ⌥Espace) :
  *   debut         une bulle « Eliot » fantôme apparaît en bas du fil, avec le témoin « Jarvis écoute » ;
  *   partiel       tout le texte entendu jusqu'ici (whisper-server, retranscrit en boucle) ;
+ *   attente       Eliot s'est tu ~1,2 s : Jarvis attend une éventuelle suite avant d'envoyer (« … j’attends la suite »),
+ *                 les partiels continuent de mettre le texte à jour ;
+ *   reprise       Eliot reparle, même énoncé (même id, depuis attente ou transcription) : retour à l'écoute ;
  *   transcription l'énoncé est fini, whisper-cli fait le texte définitif ;
  *   fini          le texte retenu, juste avant bt.transcription : la bulle fantôme devient celle du message ;
  *   annule        bruit, remplissage, autre session : la bulle s'efface en fondu.
+ * debut avec `suite: true` : Eliot reprend moins de 3 s après un message vocal. Si session.raccordVocal() accepte
+ * (Claude n'a rien écrit), le fragment quitte le fil et la bulle fantôme le montre devant les nouveaux mots
+ * (déjà posés, sans entrée) : la phrase complète grandit sous les yeux d'Eliot, puis part en un seul message.
  * Rendu : les mots nouveaux arrivent un par un en fondu ; un mot déjà affiché ne bouge pas ; un mot corrigé par
  * whisper se fond dans sa nouvelle forme (alignement mot à mot, plus longue sous-suite commune).
  * Aucun accès à session.js ni à vue-fil.js : la bulle vit dans #fil (toujours en dernier) et l'échange avec la vraie
@@ -16,7 +22,7 @@
   'use strict';
   var BT = window.BT = window.BT || {};
 
-  var ETATS = { ecoute: 'Jarvis écoute', transcription: 'Jarvis transcrit', fini: 'Compris' };
+  var ETATS = { ecoute: 'Jarvis écoute', attente: '… j’attends la suite', transcription: 'Jarvis transcrit', fini: 'Compris' };
   var DUREE_ENTREE = 260, DUREE_SORTIE = 220;
 
   function reduit() {
@@ -75,6 +81,8 @@
     if (se) se.addEventListener('wheel', function (e) { if (e.deltaY < 0 && self.g) self.g.suivre = false; }, { passive: true });
     // Mode vocal coupé : plus rien à montrer.
     app.session.on('vocal', function (v) { if (!v || !v.actif) self._retirer(self.g); });
+    // Raccord d'un énoncé coupé trop tôt (session.raccordVocal) : fragment masqué, coupe du fil, envoi différé.
+    app.session.on('raccord', function (e) { self._raccord(e || {}); });
   }
   BT.VocalDirect = VocalDirect;
 
@@ -95,11 +103,28 @@
     }
     switch (d.etat) {
       case 'debut':
-        if (!g) g = this._creer(id, d.source);
+        if (!g) {
+          var s = this.app.session;
+          var prefixe = d.suite && s.raccordVocal ? s.raccordVocal() : null;
+          g = this._creer(id, d.source);
+          if (prefixe) this._prefixe(g, prefixe);
+        }
         break;
       case 'partiel':
         if (!g) g = this._creer(id, d.source);
-        if (g.etat === 'ecoute') this._texte(g, d.texte, false);
+        if (g.etat === 'ecoute' || g.etat === 'attente') this._texte(g, d.texte, false);
+        break;
+      case 'attente':
+        if (!g) g = this._creer(id, d.source);
+        if (g.etat === 'fini') return;
+        this._etat(g, 'attente');
+        if (d.texte) this._texte(g, d.texte, false);
+        break;
+      case 'reprise':
+        if (!g) g = this._creer(id, d.source);
+        if (g.etat === 'fini') return;
+        this._etat(g, 'ecoute');
+        if (d.texte) this._texte(g, d.texte, false);
         break;
       case 'transcription':
         if (!g) return;
@@ -124,8 +149,10 @@
   VocalDirect.prototype._garde = function (g) {
     var self = this;
     clearTimeout(g.minuteur);
-    var ms = g.etat === 'fini' ? 5000 : g.etat === 'transcription' ? 45000 : 75000;
+    // (raccord : la fusion peut attendre jusqu'à 5 s le result de l'interruption)
+    var ms = g.etat === 'fini' ? (g.prefixe ? 8000 : 5000) : g.etat === 'transcription' ? 45000 : 75000;
     g.minuteur = setTimeout(function () { if (self.g === g) self._retirer(g); }, ms);
+    if (g.prefixe && this.app.session.raccordGarde) this.app.session.raccordGarde();
   };
 
   /* ---------- Bulle fantôme ---------- */
@@ -165,6 +192,7 @@
 
   VocalDirect.prototype._etat = function (g, etat) {
     g.etat = etat;
+    g.n.classList.toggle('vd-attend', etat === 'attente');
     g.n.classList.toggle('vd-transcrit', etat === 'transcription');
     g.n.classList.toggle('vd-fini', etat === 'fini');
     g.libelle.textContent = ETATS[etat] || '';
@@ -173,7 +201,7 @@
   /* Nouveau texte entendu. Les mots déjà là restent ; ceux qui changent se fondent ; les nouveaux de la fin
    * arrivent un par un (final : vite, tous). */
   VocalDirect.prototype._texte = function (g, t, final) {
-    var B = mots(t);
+    var B = mots(g.prefixe ? g.prefixe + ' ' + (t || '') : t);
     if (!B.length && !final) return;
     var A = g.mots.map(function (m) { return m.cle; });
     var Bc = B.map(cle);
@@ -325,6 +353,8 @@
   VocalDirect.prototype._retirer = function (g) {
     if (!g) return;
     if (this.g === g) this.g = null;
+    // Énoncé suite abandonné : le fragment repart seul (sans effet si la fusion est déjà partie).
+    if (g.prefixe && !g.attendRaccord && this.app.session.raccordAnnule) this.app.session.raccordAnnule();
     clearInterval(g.tic); clearTimeout(g.minuteur);
     if (g.sortie) return;
     g.sortie = true;
@@ -341,7 +371,13 @@
   /* Avant session.transcription : la bulle fantôme quitte le fil (même tâche, aucun rendu entre les deux), pour que
    * la vraie bulle prenne exactement sa place et que le défilement calcule sans elle. */
   VocalDirect.prototype.avantTranscription = function () {
-    var g = this.g;
+    var g = this.g, s = this.app.session;
+    // Fusion qui attend le result de l'interruption : la bulle fantôme reste, l'échange se fera à l'envoi ('raccord').
+    if (g && g.prefixe && !g.sortie && s.raccordEnAttente && s.raccordEnAttente()) {
+      g.attendRaccord = true;
+      this._garde(g);
+      return null;
+    }
     if (!g || g.sortie || g.etat === 'ecoute' || !g.n.isConnected) return null;
     clearInterval(g.tic); clearTimeout(g.minuteur);
     var r = g.bulle.getBoundingClientRect();
@@ -381,9 +417,70 @@
     if (pied) pied.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: 'ease-out' });
   };
 
+  /* ---------- Raccord d'un énoncé coupé trop tôt ---------- */
+
+  /* Le fragment est déjà dans la bulle : ses mots sont posés tels quels, sans entrée ni « … ». */
+  VocalDirect.prototype._prefixe = function (g, t) {
+    g.prefixe = String(t).trim();
+    g.n.classList.remove('vd-entre-bulle');
+    if (g.attente.isConnected) g.attente.remove();
+    g.mots = mots(g.prefixe).map(function (m) {
+      var w = { texte: m, cle: cle(m), el: el('span', 'vd-mot'), sale: true };
+      g.texte.appendChild(w.el);
+      return w;
+    });
+    this._ecrire(g);
+    this._montrer(g);
+  };
+
+  /* Le fragment (et le début de tour de Claude) disparaît dès le raccord, avant la coupe effective du fil. */
+  VocalDirect.prototype._masquer = function (item, oui) {
+    if (!oui) {
+      this.racine.querySelectorAll('.vd-raccorde').forEach(function (x) { x.classList.remove('vd-raccorde'); });
+      return;
+    }
+    var n = item && this.app.vue.noeud ? this.app.vue.noeud(item.id) : null;
+    if (!n || n.parentNode !== this.racine) return;
+    for (; n; n = n.nextElementSibling) if (!n.classList.contains('vd-fantome')) n.classList.add('vd-raccorde');
+  };
+
+  /* Événements 'raccord' de la session. */
+  VocalDirect.prototype._raccord = function (e) {
+    var g = this.g;
+    if (e.etape === 'debut') { this._masquer(e.item, true); return; }
+    if (e.etape === 'abandon') { this._masquer(null, false); return; }
+    if (e.etape === 'coupe') {
+      // La vue retire le fragment et tout ce qui le suit dans #fil : la bulle fantôme s'écarte le temps de la coupe.
+      if (!g || g.sortie) return;
+      if (e.avant) {
+        g.coupeLa = g.n.isConnected && !g.detache;
+        if (g.coupeLa) { g.detache = true; g.n.remove(); }
+      } else if (g.coupeLa) {
+        g.coupeLa = false;
+        g.detache = false;
+        this.racine.appendChild(g.n);
+        this._montrer(g);
+      }
+      return;
+    }
+    if (e.etape === 'envoi') {
+      if (e.avant) {
+        this._ctxRaccord = g && g.attendRaccord ? this.avantTranscription() : null;
+        return;
+      }
+      var ctx = this._ctxRaccord;
+      this._ctxRaccord = null;
+      if (!ctx) return;
+      ctx.g.attendRaccord = false;
+      this.apresTranscription(ctx, e.item);
+      if (e.item && this.app.defilement) this.app.defilement.allerEnBas();
+    }
+  };
+
   /* Tests : état de la bulle fantôme. */
   VocalDirect.prototype.etatTest = function () {
     var g = this.g;
-    return g ? { id: g.id, etat: g.etat, texte: g.texte.textContent, mots: g.mots.length, file: g.file.length } : null;
+    return g ? { id: g.id, etat: g.etat, texte: g.texte.textContent, mots: g.mots.length, file: g.file.length,
+      libelle: g.libelle.textContent, prefixe: g.prefixe || '', attendRaccord: !!g.attendRaccord } : null;
   };
 })();

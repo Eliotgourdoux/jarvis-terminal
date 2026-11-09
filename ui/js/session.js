@@ -111,6 +111,7 @@
     this._vocalEchecs = Object.create(null);   // id de pont -> réponses vocales incomprises d'affilée
     this._tourVocal = false;   // le tour en cours répond à un message qui portait la consigne vocale (textes « vocal »)
     this._vocalDit = false;    // le bloc <vocal> de ce tour est déjà parti à la coque (pendant l'écriture)
+    this._vocalAttente = null; // clé du tour dont la voix attend le rendu d'un aperçu (repères [[n]])
   }
   Session.prototype = Object.create(BT.Emetteur.prototype);
   Session.prototype.constructor = Session;
@@ -237,7 +238,7 @@
     if (d.raison === 'terminal') this.dansTerminal = true;
     var self = this;
     this.questionsEnAttente().forEach(function (q) { self._annulerQuestion(q, d.raison === 'terminal' ? 'Partie dans le Terminal' : 'Session terminée'); });
-    if (d.raison === 'terminal') this._note('info', 'La session continue dans le Terminal. Cette fenêtre reste lisible mais n’envoie plus rien.');
+    if (d.raison === 'terminal') this._note('info', 'La session continue dans le Terminal. « Reprendre ici » la ramène dans l’app.');
     else if (code === 0 || code === null) this._note('info', 'Session terminée.');
     else this._note('erreur', 'Claude s’est arrêté (code ' + code + ').', this._stderr.slice(-12).join('\n'));
     this._calculerEtat();
@@ -669,6 +670,8 @@
     this._flux = Object.create(null);
   };
 
+  var RE_VISUEL_TOUR = /```[ \t]*(?:html?|svg|mermaid|mmd|jarvis)\b/i;
+
   Session.prototype._resultat = function (d) {
     var interrompu = this._interrompu || /^aborted/.test(d.terminal_reason || '');
     this._interrompu = false;
@@ -705,6 +708,10 @@
     // Bloc <vocal> déjà dit pendant l'écriture : rien de plus.
     if (this.vocal.actif && !interrompu && !this._vocalDit) this._vocalFin(d, erreur);
     this._vocalDit = false;
+    // Voix en attente d'un aperçu que ce tour n'a pas écrit (ou tour interrompu) : elle part tout de suite.
+    if (this._vocalAttente && (interrompu || !this._textesDuTour().some(function (it) { return RE_VISUEL_TOUR.test(it.texte || ''); }))) {
+      this.apercuPret(this._vocalAttente);
+    }
     this._cloreTourVocal();
     // Un message vocal mis en file pendant ce tour garde son tour vocal (sa réponse vient ensuite).
     if (!fileVocale) this._tourVocal = false;
@@ -1055,13 +1062,31 @@
   /* Texte reçu (flux ou message complet) : bloc <vocal> apparu → tout le tour devient vocal ;
    * bloc fermé pendant l'écriture → Jarvis le dit tout de suite, une seule fois par tour. */
   Session.prototype._texteVocal = function (it) {
+    if (!it.parent && !it.cleTour) it.cleTour = this._cleDuTour();
     if (it.parent || !BT.aBlocVocal(it.texte)) return;
     if (!it.vocal) { this._marquerTourVocal(); it.vocal = true; }
     if (it.historique || this._vocalDit || !this.vocal.actif || !BT.vocal) return;
     var dit = BT.texteVocalFerme(it.texte);
     if (!dit) return;
     this._vocalDit = true;
-    this._envoyer('vocal', { texte: BT.vocal.resumeFin(it.texte) || dit, priorite: 'fin' });
+    var m = { texte: BT.vocal.resumeFin(it.texte) || dit, priorite: 'fin' };
+    // Repères [[n]] : la voix attend que l'aperçu du tour soit rendu (vocalPret, 20 s au plus côté coque),
+    // puis la coque renvoie chaque étape atteinte (bt.vocalEtape { n, cle }).
+    if (BT.aReperes(m.texte)) { m.cle = it.cleTour; m.attendre = true; this._vocalAttente = it.cleTour; }
+    this._envoyer('vocal', m);
+  };
+
+  /* Clé du tour en cours : relie le bloc <vocal> (côté coque) aux aperçus et à la scène de ce tour. */
+  Session.prototype._cleDuTour = function () {
+    for (var i = this.items.length - 1; i >= 0; i--) if (this.items[i].genre === 'eliot') return 't' + this.items[i].id;
+    return 't0';
+  };
+
+  /* Un aperçu (ou la scène) du tour est rendu : la voix qui l'attendait peut partir. Une seule fois par tour. */
+  Session.prototype.apercuPret = function (cle) {
+    if (!cle || this._vocalAttente !== cle) return;
+    this._vocalAttente = null;
+    this._envoyer('vocalPret', { cle: cle });
   };
 
   /* Textes du tour en cours (depuis le dernier message d'Eliot), du plus récent au plus ancien. */
@@ -1106,11 +1131,14 @@
 
   /* bt.transcription({texte, questionId?}) : texte dicté pour cette session.
    * Avec questionId : réponse à la question ; sinon : message pour Claude (source « vocal »).
-   * Renvoie l'élément créé (message), true (réponse acceptée) ou false (rien fait). */
+   * Renvoie l'élément créé (message), true (réponse acceptée) ou false (rien fait).
+   * Raccord en cours (voir raccordVocal, `suite: true`) : le message part fusionné avec le fragment ; true s'il
+   * attend encore le `result` de l'interruption (envoyé ensuite, événement 'raccord'). */
   Session.prototype.transcription = function (d) {
     d = d || {};
     var texte = this._sansNomProjet(String(d.texte == null ? '' : d.texte).trim());
     var id = d.questionId;
+    if (!id && this._raccord) return this._raccordSuite(texte);
     if (!id) {
       if (!BT.vocal || BT.vocal.parasite(texte)) return false; // silence ou « Sous-titres réalisés par… »
       return this.envoyerMessage(texte, 'vocal') || false;
@@ -1146,6 +1174,108 @@
       return true;
     }
     return this.repondre(q.id, { decision: r.decision, message: r.message }, 'vocal');
+  };
+
+  /* ---------- Raccord d'un énoncé vocal coupé trop tôt (09/11/2026) ----------
+   * Eliot reprend la parole moins de 3 s après un message vocal (bt.vocalDirect debut, `suite: true`). Si Claude
+   * n'a encore rien écrit pour ce tour, le tour est interrompu (comme le bouton Arrêter), la bulle du fragment et
+   * ce qui suit quittent le fil au `result` interrompu, et la suite part avec le fragment en UN seul message.
+   * Sinon rien de spécial : la suite partira comme message suivant.
+   * Événement 'raccord' ({etape, avant?, item?, fusion?}) pour js/vocal-direct.js :
+   *   debut (item = fragment), coupe (avant: true/false, autour de _couperDepuis), abandon (interruption jamais
+   *   revenue : le fragment reste dans le fil), envoi (avant: true/false, item = message envoyé). */
+  var RACCORD_AGE = 4000, RACCORD_RESULT = 5000, RACCORD_SUITE = 20000;
+
+  /* Décide et lance l'interruption. Renvoie le texte du fragment, ou null (conditions non remplies). */
+  Session.prototype.raccordVocal = function () {
+    if (this._raccord) return this._raccord.texte;   // même énoncé annoncé deux fois
+    if (this.termine || this.dansTerminal || !this.travaille || this._interrompu) return null;
+    var frag = null;
+    for (var i = this.items.length - 1; i >= 0; i--) {
+      var it = this.items[i];
+      if (it.genre === 'eliot') { frag = it; break; }
+      // Claude a déjà écrit ou agi pour ce tour (la réflexion ne compte pas).
+      if (it.genre === 'outil' || it.genre === 'question' || (it.genre === 'texte' && String(it.texte || '').trim())) return null;
+    }
+    if (!frag || frag.source !== 'vocal' || frag.enFile || !String(frag.texte || '').trim()) return null;
+    if (Date.now() - (frag.date || 0) > RACCORD_AGE) return null;
+    if (!this.interrompre()) return null;
+    var self = this;
+    var r = this._raccord = { item: frag, texte: String(frag.texte).trim(), pret: false, coupe: false, envoi: null, mSuite: 0, mResult: 0 };
+    if (!this._raccordEcoute) {
+      this._raccordEcoute = true;
+      this.on('ajout', function (x) { if (x && x.genre === 'fin') self._raccordFin(x); });
+    }
+    this.raccordGarde();
+    this.emit('raccord', { etape: 'debut', item: frag });
+    return r.texte;
+  };
+
+  /* Eliot parle encore (partiels) : le délai de 20 s sans transcription repart de zéro. */
+  Session.prototype.raccordGarde = function () {
+    var r = this._raccord, self = this;
+    if (!r || r.envoi) return;
+    clearTimeout(r.mSuite);
+    r.mSuite = setTimeout(function () { if (self._raccord === r) self.raccordAnnule(); }, RACCORD_SUITE);
+  };
+
+  /* Le `result` interrompu est arrivé : le fragment et ce qui suit quittent le fil (après la fin de _resultat,
+   * avant tout rendu : pas de flash), puis la suite part si elle attendait. */
+  Session.prototype._raccordFin = function (fin) {
+    var r = this._raccord, self = this;
+    if (!r || r.coupe || !fin.interrompu) return;
+    r.coupe = true;
+    Promise.resolve().then(function () {
+      if (self._raccord !== r) return;
+      self.emit('raccord', { etape: 'coupe', avant: true, item: r.item });
+      self._couperDepuis(r.item);
+      r.pret = true;
+      self.emit('raccord', { etape: 'coupe', avant: false, item: r.item });
+      if (r.envoi) self._raccordPartir();
+    });
+  };
+
+  /* L'interruption n'est pas encore revenue (la suite attend son `result`). */
+  Session.prototype.raccordEnAttente = function () { return !!(this._raccord && !this._raccord.pret); };
+
+  /* bt.transcription de l'énoncé suite : fragment + suite, mêmes filtres que transcription. */
+  Session.prototype._raccordSuite = function (suite) {
+    var r = this._raccord;
+    if (!BT.vocal || BT.vocal.parasite(suite)) suite = '';
+    return this._raccordEnvoyer(suite ? r.texte + ' ' + suite : r.texte, !!suite);
+  };
+
+  /* Énoncé suite abandonné (bruit, autre session, rien en 20 s) : le fragment repart seul, rien n'est perdu. */
+  Session.prototype.raccordAnnule = function () {
+    var r = this._raccord;
+    if (!r || r.envoi) return false;
+    return this._raccordEnvoyer(r.texte, false);
+  };
+
+  Session.prototype._raccordEnvoyer = function (texte, fusion) {
+    var r = this._raccord, self = this;
+    clearTimeout(r.mSuite);
+    r.envoi = { texte: texte, fusion: fusion };
+    if (r.pret) return this._raccordPartir();
+    // Interruption pas encore revenue : on attend son result, 5 s au plus.
+    r.mResult = setTimeout(function () { if (self._raccord === r) self._raccordPartir(); }, RACCORD_RESULT);
+    return true;
+  };
+
+  Session.prototype._raccordPartir = function () {
+    var r = this._raccord;
+    if (!r || !r.envoi) return false;
+    this._raccord = null;
+    clearTimeout(r.mSuite); clearTimeout(r.mResult);
+    if (!r.pret) {
+      // Jamais coupé : le fragment est toujours dans le fil et chez Claude. Seule une vraie suite part en plus.
+      this.emit('raccord', { etape: 'abandon', item: r.item });
+      if (!r.envoi.fusion) return false;
+    }
+    this.emit('raccord', { etape: 'envoi', avant: true, fusion: r.envoi.fusion });
+    var it = this.envoyerMessage(r.envoi.texte, 'vocal') || null;
+    this.emit('raccord', { etape: 'envoi', avant: false, item: it, fusion: r.envoi.fusion });
+    return it || false;
   };
 
   /* ================= Actions d'Eliot ================= */

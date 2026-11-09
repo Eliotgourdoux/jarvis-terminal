@@ -317,7 +317,7 @@
 
   VueFil.prototype._rendreTexte = function (it, n) {
     var src = BT.nettoyerTexteClaude(it.texte);
-    var vocal = !!it.vocal, dit = vocal ? BT.texteVocalFerme(it.texte) || (it.enCours ? '' : BT.texteVocal(it.texte)) : '';
+    var vocal = !!it.vocal, dit = vocal ? BT.sansReperes(BT.texteVocalFerme(it.texte) || (it.enCours ? '' : BT.texteVocal(it.texte))) : '';
     // Tour vocal : visible tant qu'il s'écrit (curseur), puis seulement s'il y a la voix ou un visuel.
     var vide = vocal ? (!it.enCours && !dit && !BT.aDesVisuels(src)) : !src.trim();
     if (vide) { n.hidden = true; if (n._ecr) this._finirEcriture(n); n._src = null; return; }
@@ -340,6 +340,8 @@
       if (dernier && dernier.tagName === 'P') dernier.appendChild(document.createTextNode(' …'));
     }
     n.replaceChildren(frag);
+    // Tour vocal en direct : ses aperçus sont montés tout de suite, la voix attend leur rendu.
+    if (vocal && !it.enCours && !it.historique && BT.monterApercus) BT.monterApercus(n, it.cleTour);
   };
 
   /* Contenu d'un bloc de texte. Normal : le markdown rendu. Tour vocal : la ligne repliée « Jarvis a dit »
@@ -347,6 +349,8 @@
    * curseur : curseur d'écriture au bout ; medias : lecteurs des images et vidéos citées (texte complet seulement). */
   VueFil.prototype._fragTexte = function (it, n, src, enCours, curseur, medias) {
     var vis = it.vocal ? BT.rendreVisuels(src, { enCours: enCours }) : BT.rendreMarkdown(src, { enCours: enCours });
+    // Clé du tour sur chaque aperçu : les étapes de la voix (repères [[n]]) lui arrivent (js/apercu.js).
+    if (it.cleTour) vis.querySelectorAll('.apercu-cadre').forEach(function (c) { c._cle = it.cleTour; });
     if (curseur) ajouterCurseur(vis);
     // Lecteur intégré (images, vidéos, sons locaux cités), une fois le texte complet : pas de rechargement à chaque delta.
     if (medias && BT.medias) {
@@ -355,7 +359,7 @@
     }
     if (!it.vocal) return vis;
     var frag = document.createDocumentFragment();
-    var dit = BT.texteVocalFerme(it.texte) || (it.enCours ? '' : BT.texteVocal(it.texte));
+    var dit = BT.sansReperes(BT.texteVocalFerme(it.texte) || (it.enCours ? '' : BT.texteVocal(it.texte)));
     if (dit) frag.appendChild(this._ligneJarvis(it, n, dit));
     frag.appendChild(vis);
     return frag;

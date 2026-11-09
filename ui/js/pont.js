@@ -59,13 +59,18 @@
     transcription: appel('transcription'),
     // Mots d'Eliot en direct pendant un énoncé du mode vocal (js/vocal-direct.js).
     vocalDirect: appel('vocalDirect'),
+    // Étape d'animation atteinte par la voix (repères [[n]] du bloc <vocal>) : relayée à l'aperçu du tour.
+    vocalEtape: appel('vocalEtape'),
     // Fichiers joints (bouton, Finder, collage) : chemins réels lus par la coque.
     fichiers: appel('fichiers'),
     dictee: appel('dictee'),
     // Panneau To-do (js/todo.js ↔ app/Sources/Todo.swift).
     todo: appel('todo'),
     // Sous-agents en cours (js/agents.js ↔ app/Sources/SuiviAgents.swift).
-    agents: appel('agents')
+    agents: appel('agents'),
+    // Sessions du Victus (victus/CONTRAT-VICTUS.md) : texte confié par le démon, message tapé sur une autre page.
+    texteAEnvoyer: appel('texteAEnvoyer'),
+    utilisateurAilleurs: appel('utilisateurAilleurs')
   };
 
   /* Branche les fonctions réelles et vide la file. */

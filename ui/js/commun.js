@@ -34,6 +34,14 @@
     var m = RE_VOCAL_FERME.exec(String(t == null ? '' : t));
     return m ? m[1].trim() : '';
   };
+  /* Repères d'animation [[n]] dans le bloc <vocal> : jamais dits ni affichés ; la coque déclenche l'étape n
+   * de l'aperçu du tour quand la voix arrive au segment n (CONTRAT.md, « Animations au rythme de la voix »). */
+  var RE_REPERE = /\[\[\s*\d{1,3}\s*\]\]/;
+  var RE_REPERES = /[ \t]*\[\[\s*\d{1,3}\s*\]\][ \t]*/g;
+  BT.aReperes = function (t) { return RE_REPERE.test(String(t == null ? '' : t)); };
+  BT.sansReperes = function (t) {
+    return String(t == null ? '' : t).replace(RE_REPERES, ' ').replace(/ {2,}/g, ' ').replace(/ ([.,;:!?])/g, '$1').trim();
+  };
   BT.aBlocVocal = function (t) { return /<vocal>/i.test(String(t == null ? '' : t)); };
   BT.sansVocal = function (t) {
     return String(t == null ? '' : t).replace(RE_VOCAL_TOUS, '').replace(RE_VOCAL_DEBUT, '');
@@ -49,7 +57,12 @@
     + 'Ensuite, uniquement ce qui aide à l’écran : bloc ```html apercu (animation ou schéma léger, autonome, rapide à écrire), '
     + 'mermaid ou svg, commande ou code à copier dans un bloc de code, lien, chemin d’image ou de vidéo, tableau si c’est vraiment plus clair. '
     + 'Aucune prose qui répète la voix : le texte hors de ces éléments n’est pas affiché. Si rien de visuel n’aide, n’écris rien d’autre. '
-    + 'La voix peut renvoyer à l’écran (« je te mets la commande »). Termine quand même par la ligne ✅, elle sera masquée.</mode-vocal>';
+    + 'La voix peut renvoyer à l’écran (« je te mets la commande »). '
+    + 'Pour animer au rythme de ta voix, place des repères [[1]], [[2]]… dans le bloc vocal (jamais dits) et, dans l’aperçu, '
+    + '<script>jarvis.etape(n => document.body.dataset.etape = n)</script> : l’étape n arrive quand ta voix atteint [[n]], l’étape 0 au départ, et chaque étape montre l’état complet. '
+    + 'Pour un schéma qui reste affiché d’un message à l’autre, écris ```html apercu scene=nom``` ; ensuite, renvoie le même nom pour le remplacer, '
+    + 'ou un bloc ```jarvis scene=nom``` (JS ou JSON reçu par jarvis.recevoir(d => …)) pour le modifier sur place. '
+    + 'Animations légères en CSS, rapides à écrire, sans boucle. Termine quand même par la ligne ✅, elle sera masquée.</mode-vocal>';
   BT.aConsigneVocale = function (t) { return /<mode-vocal>[\s\S]*?<\/mode-vocal>/.test(String(t == null ? '' : t)); };
   BT.sansConsigneVocale = function (t) {
     return String(t == null ? '' : t).replace(RE_CONSIGNE_VOCALE, '\n').trim();

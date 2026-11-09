@@ -27,6 +27,10 @@ final class DicteeDirecte {
     private var generation = 0
     private var tramesEnvoyees = 0
     private var dernierTexte = ""
+    /// Dernier texte rendu par le serveur et la taille de l'audio qu'il couvre (même vide, même inchangé).
+    private var dernierResultat: (texte: String, echantillons: Int)?
+    /// Demandes de texte « frais » (fin d'énoncé intelligente) : rendu dès qu'un texte couvre `min` échantillons.
+    private var frais: [(min: Int, gen: Int, rappel: (String?) -> Void)] = []
     private var minuteur: Timer?
     private var arretDiffere: DispatchWorkItem?
     private let url = URL(string: "http://127.0.0.1:\(DicteeDirecte.port)/inference")!
@@ -50,6 +54,8 @@ final class DicteeDirecte {
         self.audio = audio
         tramesEnvoyees = 0
         dernierTexte = ""
+        dernierResultat = nil
+        echouerFrais()
         arretDiffere?.cancel(); arretDiffere = nil
         demarrerServeur()
         minuteur?.invalidate()
@@ -60,6 +66,7 @@ final class DicteeDirecte {
         guard actif else { return }
         actif = false
         generation += 1
+        echouerFrais()
         minuteur?.invalidate(); minuteur = nil
         surPartiel = nil; audio = nil
         planifierArret()
@@ -86,12 +93,41 @@ final class DicteeDirecte {
 
     // MARK: - Transcriptions partielles
 
-    private func tic() {
+    /// Texte de l'énoncé en cours lu sur au moins `min` échantillons (toute la parole jusqu'à une pause) :
+    /// tout de suite si le dernier texte suffit, sinon après la prochaine passe (lancée sans attendre).
+    /// nil si le serveur n'est pas prêt, si la dictée s'arrête, ou après `delai`. Fil principal.
+    func texteFrais(min: Int, delai: TimeInterval, _ rappel: @escaping (String?) -> Void) {
+        guard actif, pret else { rappel(nil); return }
+        if let r = dernierResultat, r.echantillons >= min { rappel(r.texte); return }
+        let gen = generation
+        frais.append((min, gen, rappel))
+        tic(force: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delai) {
+            let d = DicteeDirecte.shared
+            guard let i = d.frais.firstIndex(where: { $0.gen == gen && $0.min == min }) else { return }
+            let r = d.frais.remove(at: i).rappel
+            r(nil)
+        }
+    }
+
+    private func echouerFrais() {
+        let l = frais; frais = []
+        l.forEach { $0.rappel(nil) }
+    }
+
+    private func rendreFrais(_ texte: String, echantillons n: Int) {
+        let prets = frais.filter { $0.gen == generation && $0.min <= n }
+        frais.removeAll { $0.gen == generation && $0.min <= n }
+        prets.forEach { $0.rappel(texte) }
+    }
+
+    private func tic(force: Bool = false) {
         guard actif, pret, !requete, let audio else { return }
         let pcm = audio()
-        // au moins 0,6 s d'audio, et 0,3 s de nouveau depuis la dernière passe
-        guard pcm.count >= 9_600, pcm.count - tramesEnvoyees >= 4_800 else { return }
+        // au moins 0,6 s d'audio, et 0,3 s de nouveau depuis la dernière passe (forcé : du nouveau suffit)
+        guard pcm.count >= 9_600, pcm.count - tramesEnvoyees >= (force ? 1 : 4_800) else { return }
         tramesEnvoyees = pcm.count
+        let nEnvoyes = pcm.count
         requete = true
         let gen = generation
         var req = URLRequest(url: url, timeoutInterval: 8)
@@ -107,6 +143,9 @@ final class DicteeDirecte {
                 guard d.actif, gen == d.generation else { return }
                 if let err { journal("dictée en direct : \(err.localizedDescription)"); return }
                 let t = Transcription.nettoyer((brut ?? "").replacingOccurrences(of: "\n", with: " "), invite: "")
+                d.dernierResultat = (t, nEnvoyes)
+                d.rendreFrais(t, echantillons: nEnvoyes)
+                if !d.frais.isEmpty { d.tic(force: true) }   // une demande attend plus d'audio que cette passe
                 guard !t.isEmpty, t != d.dernierTexte else { return }
                 d.dernierTexte = t
                 d.surPartiel?(t)
