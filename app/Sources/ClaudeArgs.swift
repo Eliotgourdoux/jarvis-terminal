@@ -29,7 +29,10 @@ enum ClaudeArgs {
     Dans un aperçu, Chart.js est disponible hors ligne avec <script src="chart.js"></script> (et mermaid avec <script src="mermaid.js"></script>) ; \
     les CDN en https marchent aussi si le Mac est en ligne. L'aperçu est isolé : aucun accès aux fichiers locaux ni à l'app. \
     Le fond est sombre (#0C0D10) et le texte clair : choisis des couleurs lisibles dessus (ex. Chart.defaults.color = '#ECECF1'). \
-    Mets tout dans un seul bloc autonome, sans fichier externe local. N'en abuse pas : un visuel seulement quand il aide à comprendre.
+    Mets tout dans un seul bloc autonome, sans fichier externe local. N'en abuse pas : un visuel seulement quand il aide à comprendre. \
+    Au-dessus de la saisie, l'utilisateur voit deux listes numérotées : « Plan de Claude » (tes étapes TodoWrite, numérotées dans l'ordre) \
+    et « À toi » (la to-do du projet, numérotée dans l'ordre exact de `todo list <projet>`). \
+    Quand il parle de « la 3 » ou « la tâche 3 », lance `todo list <projet>` et prends la ligne 3, ou l'étape 3 de ton plan si le contexte l'indique.
     """
 
     /// Arguments complets (sans le binaire).

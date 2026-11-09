@@ -45,6 +45,52 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     /// La conversation Telegram avec Jarvis est affichée (alors `selection` vaut nil).
     private(set) var jarvisDevant = false
 
+    // MARK: Page affichée gardée d'un lancement à l'autre (demande d'Eliot, 09/11/2026)
+    // « BTPageAffichee » = id de la session affichée, ou « jarvis ». Pendant la réouverture des sessions,
+    // les sessions qui arrivent ne passent plus devant : seule la page mémorisée reprend sa place.
+    private static let clePage = "BTPageAffichee"
+    private var pageAReprendre: String?
+    private var restauration = false
+
+    /// Appelé par RegistreSessions.rouvrirDernieres() avant d'ouvrir les sessions.
+    func debuterRestauration() {
+        pageAReprendre = Reglages.texte(Self.clePage)
+        restauration = true
+        // Filet : si la page mémorisée n'existe plus, on garde ce qui est affiché et on reprend la mémoire normale.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [self] in
+            guard restauration else { return }
+            restauration = false; pageAReprendre = nil; memoriserPage()
+        }
+        if pageAReprendre == "jarvis" { reprendreJarvis(essai: 0) }
+    }
+
+    private func reprendreJarvis(essai: Int) {
+        guard restauration, pageAReprendre == "jarvis" else { return }
+        if ConversationJarvis.shared.disponible { selectionnerJarvis(); finirRestauration(); return }
+        if essai < 16 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in reprendreJarvis(essai: essai + 1) } }
+    }
+
+    private func finirRestauration() {
+        // Les autres sessions rouvertes juste après ne doivent pas voler la place : on garde la fenêtre de 10 s,
+        // mais la page est trouvée, donc plus rien à attendre.
+        pageAReprendre = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in restauration = false; memoriserPage() }
+    }
+
+    /// Une session qui vient de s'ouvrir passe-t-elle devant ? Oui, sauf pendant la réouverture au lancement
+    /// (alors seule la session mémorisée passe devant).
+    func doitPasserDevant(_ v: FenetreSession) -> Bool {
+        guard restauration else { return true }
+        if let id = v.sessionLiee?.sessionId, id == pageAReprendre { return true }
+        return false
+    }
+
+    private func memoriserPage() {
+        guard !restauration, !RegistreSessions.shared.quitte, !PiloteDev.actif else { return }
+        if jarvisDevant { Reglages.mettre("jarvis", Self.clePage) }
+        else if let id = selection?.sessionLiee?.sessionId { Reglages.mettre(id, Self.clePage) }
+    }
+
     private override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -165,6 +211,8 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         }
         window.makeFirstResponder(v.web)
         planifierMaj()
+        if restauration, let id = v.sessionLiee?.sessionId, id == pageAReprendre { finirRestauration() }
+        memoriserPage()
     }
 
     /// La conversation Telegram avec Jarvis prend la place de la session affichée.
@@ -185,6 +233,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         if let w = c.web { window.makeFirstResponder(w) }
         c.marquerAffichee()
         planifierMaj()
+        memoriserPage()
     }
 
     /// Réordonne sans retirer : aucune vue ne quitte la fenêtre (WebKit continue de les faire tourner).

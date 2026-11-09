@@ -166,7 +166,7 @@
 .td-bloc.replie .td-resume { visibility: visible; }
 .td-bloc.replie .td-liste { display: none; }
 
-.td-liste { list-style: none; margin: 0; padding: 0 12px 8px 30px; max-height: 162px; overflow-y: auto; display: grid; gap: 3px; }
+.td-liste { list-style: none; margin: 0; padding: 0 12px 8px 14px; max-height: 162px; overflow-y: auto; display: grid; gap: 3px; }
 .td-ligne { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
 .td-texte { flex: 1; min-width: 0; }
 .td-case {
@@ -187,3 +187,13 @@ button.td-case:hover:not(:disabled) { background: var(--ambre-fond); }
 .td-echeance { flex: none; font-size: 12px; color: var(--faint); }
 .td-echeance.proche { color: var(--ambre); }
 .td-echeance.retard { color: var(--rouge-texte); font-weight: 650; }
+
+/* Numéros de ligne (même ordre que `todo list`) */
+.td-num {
+  flex: none; min-width: 2.2ch; text-align: right;
+  color: var(--faint); font-variant-numeric: tabular-nums; font-weight: 600;
+}
+.td-toi .td-num { color: var(--ambre); }
+.td-ligne.fait .td-num { opacity: .55; }
+.tp-tache .td-num { line-height: 1.45; padding-top: 1px; }
+.tp-etape .td-num { font-size: 12.5px; }

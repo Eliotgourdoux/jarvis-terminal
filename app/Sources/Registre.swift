@@ -73,6 +73,7 @@ final class RegistreSessions {
     static func rouvrirDernieres() -> Bool {
         var liste = (Reglages.d.array(forKey: "BTSessionsOuvertes") as? [[String: String]]) ?? []
         if liste.isEmpty, let d = Reglages.texte("BTDernierDossier") { liste = [["cwd": d]] }
+        FenetrePrincipale.shared.debuterRestauration()   // la page affichée au dernier lancement reprend sa place
         var n = 0
         for e in liste {
             guard let c = e["cwd"], FileManager.default.fileExists(atPath: c) else { continue }

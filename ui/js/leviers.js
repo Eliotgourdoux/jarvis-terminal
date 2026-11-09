@@ -115,6 +115,22 @@
     });
     levier.appendChild(libelles);
     if (mini) levier.classList.add('levier-mini');
+    // Levier mini (sans libellés) : une bulle sous la piste dit quel cran on va choisir, pendant le glissement
+    // et au survol (demande d'Eliot, 09/11/2026 : « je vois pas ce que je vais sélectionner »).
+    var bulle = null, survol = -1;
+    if (mini) { bulle = div('levier-bulle'); bulle.setAttribute('aria-hidden', 'true'); piste.appendChild(bulle); }
+    function majBulle() {
+      if (!bulle) return;
+      var i = glisse ? apercu : survol;
+      var vis = i >= 0 && (!!glisse || survol >= 0);
+      bulle.classList.toggle('visible', vis);
+      if (!vis) return;
+      var c = crans[i];
+      bulle.textContent = c.libelle + (c.dispo ? '' : ' · indisponible') + (c.value === sel.value ? ' · actuel' : '');
+      bulle.style.left = pourcent(i);
+      bulle.classList.toggle('premier', i === 0);
+      bulle.classList.toggle('dernier', i === n - 1);
+    }
     panneau.appendChild(levier);
 
     // Choix hors échelle : « Par défaut » et, pour le modèle, les autres versions. Mêmes lignes que l'ancien menu.
@@ -156,6 +172,7 @@
       valeur.textContent = t;
       if (mini) levier.title = titre + ' : ' + t + '. Glisse ou clique un cran pour changer.';
       valeur.classList.toggle('change', actif && crans[i].value !== sel.value);
+      majBulle();
     }
     function plusProche(i) {
       if (i >= 0 && i < n && crans[i].dispo) return i;
@@ -186,7 +203,17 @@
       levier.classList.add('glisse');
       dessiner();
     });
+    if (mini) {
+      levier.addEventListener('pointerleave', function () { if (!glisse) { survol = -1; majBulle(); } });
+    }
     levier.addEventListener('pointermove', function (e) {
+      if (mini && !glisse) {
+        // Survol : cran sous le curseur, même indisponible (pour voir qu'il l'est).
+        var r = piste.getBoundingClientRect(), f = r.width ? (e.clientX - r.left) / r.width : 0;
+        var k = Math.round(Math.max(0, Math.min(1, f)) * (n - 1));
+        if (k !== survol) { survol = k; majBulle(); }
+        return;
+      }
       if (!glisse || e.pointerId !== glisse.id) return;
       var i = indexSouris(e.clientX);
       if (i >= 0 && i !== apercu) { apercu = i; touche = true; glisse.bouge = true; dessiner(); }
@@ -195,7 +222,9 @@
       if (!glisse || e.pointerId !== glisse.id) return;
       var g = glisse;
       glisse = null;
+      survol = -1;
       levier.classList.remove('glisse');
+      majBulle();
       var v = valeurApercu();
       if (!valider) { apercu = g.depart; touche = courant >= 0 ? touche : false; dessiner(); return; }
       // Un simple clic sur le pouce, sans le bouger, ne change rien (évite de figer « Par défaut » par mégarde).

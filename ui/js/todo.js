@@ -180,7 +180,7 @@
     return { texte: 'pour ' + t, retard: jours < 0, proche: jours >= 0 && jours <= 1 };
   }
 
-  function ligneTache(t) {
+  function ligneTache(t, i) {
     var titre = t.titre || '';
     var enCours = !!etat.enCochage[titre];
     var li = el('li', 'tp-tache' + (enCours ? ' en-cours' : ''));
@@ -190,6 +190,7 @@
     c.title = 'Cocher : c’est fait';
     c.setAttribute('aria-label', 'Cocher « ' + titre + ' »');
     c.addEventListener('click', function () { cocher(titre); });
+    li.appendChild(numero(i));
     li.appendChild(c);
 
     var corps = el('div', 'tp-corps-tache');
@@ -249,7 +250,7 @@
       n.message.textContent = 'Aucune tâche ouverte.';
       n.message.hidden = false;
     } else {
-      etat.taches.forEach(function (t) { n.liste.appendChild(ligneTache(t)); });
+      etat.taches.forEach(function (t, i) { n.liste.appendChild(ligneTache(t, i)); });
     }
     n.compte.textContent = String(etat.taches.length);
     n.compte.hidden = !etat.charge || !p || !etat.taches.length;
@@ -353,9 +354,10 @@
     var faites = p.taches.filter(function (t) { return t.statut === 'completed'; }).length;
     n.planCompte.textContent = faites + ' sur ' + p.taches.length;
     n.planListe.textContent = '';
-    p.taches.forEach(function (t) {
+    p.taches.forEach(function (t, i) {
       var st = t.statut === 'completed' ? 'fait' : t.statut === 'in_progress' ? 'en-cours' : 'a-faire';
       var li = el('li', 'tp-etape ' + st);
+      li.appendChild(numero(i));
       li.appendChild(el('span', 'tp-marque'));
       li.appendChild(el('span', 'tp-etape-texte', t.texte));
       li.title = st === 'fait' ? 'Fait' : st === 'en-cours' ? 'En cours' : 'À faire';
@@ -364,6 +366,13 @@
   }
 
   /* ================= Liste fixe au-dessus de la saisie ================= */
+
+  // Numéro de ligne : même ordre que `todo list`, pour pouvoir dire « la 3 » à Claude.
+  function numero(i) {
+    var s = el('span', 'td-num', (i + 1) + '.');
+    s.setAttribute('aria-hidden', 'true');
+    return s;
+  }
 
   function marque(st) {
     var m = el('span', 'td-case');
@@ -402,14 +411,15 @@
     if (sig !== etat.planSignature) { etat.planSignature = sig; etat.planReplie = false; }   // nouveau plan : déplié
     var faites = p.taches.length - restantes;
     n.dPlanTete.compte.textContent = faites + '/' + p.taches.length;
-    var courante = p.taches.filter(function (t) { return t.statut === 'in_progress'; })[0]
-      || p.taches.filter(function (t) { return t.statut !== 'completed'; })[0];
-    n.dPlanTete.resume.textContent = courante ? courante.texte : 'Tout est fait';
+    var iCour = p.taches.findIndex(function (t) { return t.statut === 'in_progress'; });
+    if (iCour < 0) iCour = p.taches.findIndex(function (t) { return t.statut !== 'completed'; });
+    n.dPlanTete.resume.textContent = iCour >= 0 ? (iCour + 1) + '. ' + p.taches[iCour].texte : 'Tout est fait';
     replie(b, n.dPlanTete.tete, etat.planReplie, 'le plan');
     n.dPlanListe.textContent = '';
-    p.taches.forEach(function (t) {
+    p.taches.forEach(function (t, i) {
       var st = t.statut === 'completed' ? 'fait' : t.statut === 'in_progress' ? 'en-cours' : 'a-faire';
       var li = el('li', 'td-ligne ' + st);
+      li.appendChild(numero(i));
       li.appendChild(marque(st));
       li.appendChild(el('span', 'td-texte', t.texte));
       n.dPlanListe.appendChild(li);
@@ -426,13 +436,15 @@
     etat.toiCompteVu = taches.length;
     var ouvertes = taches.filter(function (t) { return !etat.enCochage[t.titre]; });
     n.dToiTete.compte.textContent = String(ouvertes.length);
-    n.dToiTete.resume.textContent = ouvertes.length ? ouvertes[0].titre : '';
+    var iPrem = taches.findIndex(function (t) { return !etat.enCochage[t.titre]; });
+    n.dToiTete.resume.textContent = iPrem >= 0 ? (iPrem + 1) + '. ' + taches[iPrem].titre : '';
     replie(b, n.dToiTete.tete, etat.toiReplie, 'tes tâches');
     n.dToiListe.textContent = '';
-    taches.forEach(function (t) {
+    taches.forEach(function (t, i) {
       var titre = t.titre || '';
       var coche = !!etat.enCochage[titre];
       var li = el('li', 'td-ligne a-toi' + (coche ? ' fait' : ''));
+      li.appendChild(numero(i));
       var c = el('button', 'td-case');
       c.type = 'button';
       c.disabled = coche;

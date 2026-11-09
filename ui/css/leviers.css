@@ -75,3 +75,16 @@
 .barre-choix.avec-levier .barre-choix-nom { display: none; }
 /* Valeur à largeur fixe (menus.js la cale sur l'option la plus longue) : rien ne bouge quand elle change. */
 .barre-choix .choix-valeur { display: inline-block; max-width: 150px; text-align: left; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+
+/* Bulle du levier mini : le cran visé, écrit sous la piste (pendant le glissement et au survol). */
+.levier-bulle {
+  position: absolute; top: 14px; transform: translateX(-50%); z-index: 30;
+  padding: 3px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none;
+  background: var(--surface-3); border: 1px solid var(--bord-fort); color: var(--texte);
+  font: 600 12px/1.3 var(--police); box-shadow: 0 4px 14px rgba(0,0,0,.45);
+  opacity: 0; visibility: hidden; transition: opacity .1s ease-out;
+}
+.levier-bulle.visible { opacity: 1; visibility: visible; }
+.levier.glisse .levier-bulle { color: var(--accent); border-color: var(--accent); }
+.levier-bulle.premier { transform: translateX(-12px); }
+.levier-bulle.dernier { transform: translateX(calc(-100% + 12px)); }

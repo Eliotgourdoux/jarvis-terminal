@@ -60,6 +60,8 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     static let largeurFeux: CGFloat = 16
 
     private weak var session: Session?
+    /// Session du Victus (VictusSession.swift) : la page parle au démon par le lien ssh, pas à un processus local.
+    private(set) weak var distante: VictusSession?
     let vue: NSView
     private(set) var web: WKWebView!
     private let page: URL
@@ -67,14 +69,21 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var libere = false
 
     var sessionLiee: Session? { session }
+    /// Identifiant de la session affichée, du Mac ou du Victus.
+    var idSession: String? { session?.sessionId ?? distante?.sessionId }
+    var estVictus: Bool { distante != nil }
     var window: NSWindow { FenetrePrincipale.shared.window }
     var estDevant: Bool {
         let w = FenetrePrincipale.shared.window
         return w.isKeyWindow && w.isVisible && FenetrePrincipale.shared.estChoisie(self)
     }
 
-    init(session s: Session) {
+    convenience init(session s: Session) { self.init(session: s, distante: nil) }
+    convenience init(distante d: VictusSession) { self.init(session: nil, distante: d) }
+
+    private init(session s: Session?, distante d: VictusSession?) {
         session = s
+        distante = d
         (page, lecture) = Page.choisir()
         vue = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 780))
         super.init()
@@ -83,7 +92,8 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
 
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(RelaisMessages(self), name: "bt")
-        Medias.installer(dans: cfg)   // images, vidéos et sons locaux cités dans le fil (btmedia://, Medias.swift)
+        // images, vidéos et sons cités dans le fil (btmedia://, Medias.swift) ; du Victus : copiés par ssh (VictusMedias.swift)
+        Medias.installer(dans: cfg, gestionnaire: d != nil ? VictusMedias.gestionnaire : nil)
         Apercu.installer(dans: cfg)   // aperçus html / svg / mermaid du fil (btapercu://, Apercu.swift)
         // Tests d'intégration seulement (BT_DEV_PILOTE posé au lancement) : voir PiloteDev.swift.
         if let js = PiloteDev.scriptInjecte() {
@@ -92,7 +102,9 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = false
         cfg.preferences.isElementFullscreenEnabled = false
         let vw = VueWebSession(frame: vue.bounds, configuration: cfg)
-        vw.surFichiers = { [weak self] urls in self?.session?.fichiersRecus(urls, origine: "depot") }
+        vw.surFichiers = { [weak self] urls in
+            if let d = self?.distante { d.fichiersRecus(urls, origine: "depot") } else { self?.session?.fichiersRecus(urls, origine: "depot") }
+        }
         web = vw
         web.autoresizingMask = [.width, .height]
         web.navigationDelegate = self
@@ -113,7 +125,7 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Nouvelle session : elle entre dans la barre latérale et devient la session affichée.
     func montrer() {
         FenetrePrincipale.shared.ajouter(self)
-        mettreDevant()
+        if FenetrePrincipale.shared.doitPasserDevant(self) { mettreDevant() } else { FenetrePrincipale.shared.montrer() }
     }
 
     func mettreDevant() {
@@ -122,11 +134,13 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func recharger() {
-        session?.pageDechargee()
+        pageDechargee()
         web.reloadFromOrigin()
     }
 
-    func fermerFenetre() { session?.fermer() }
+    func fermerFenetre() { if let d = distante { d.fermer() } else { session?.fermer() } }
+
+    private func pageDechargee() { if let d = distante { d.pageDechargee() } else { session?.pageDechargee() } }
 
     func marquerDansTerminal() { FenetrePrincipale.shared.planifierMaj() }
 
@@ -211,7 +225,7 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
               u.standardizedFileURL.path == page.standardizedFileURL.path else {
             journal("pont : message refusé (cadre \(m.frameInfo.request.url?.absoluteString ?? "?"))"); return
         }
-        session?.recevoir(m.body)
+        if let d = distante { d.recevoir(m.body) } else { session?.recevoir(m.body) }
     }
 
     // MARK: - Navigation : la vue ne quitte jamais sa page
@@ -237,11 +251,11 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
         return nil
     }
 
-    func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { session?.pageDechargee() }
+    func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { pageDechargee() }
 
     func webViewWebContentProcessDidTerminate(_ w: WKWebView) {
         journal("page : processus WebKit terminé, rechargement")
-        session?.pageDechargee()
+        pageDechargee()
         w.reload()
     }
 
