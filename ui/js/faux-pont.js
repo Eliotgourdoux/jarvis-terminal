@@ -23,7 +23,8 @@
  *              dicter=<texte>   à la fin de l'enregistrement, Eliot dicte ce message
  *              vocalEtat=ecoute|parle|transcription|pret  état figé (captures), avec enLigne=1 pour cette session
  *              raccourci=⌥Espace  raccourci affiché dans les aides
- *   Console : BT.fauxPont.dicter('deux') répond à la dernière question lue ; BT.fauxPont.vocaux = messages reçus. */
+ *   Console : BT.fauxPont.dicter('deux') répond à la dernière question lue ; BT.fauxPont.vocaux = messages reçus ;
+ *              BT.fauxPont.parler('texte', { pas: 250, annule: 'bruit' }) joue les mots en direct (bt.vocalDirect). */
 (function () {
   'use strict';
   if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bt) return;
@@ -101,7 +102,9 @@
     },
     vocaux: [],
     /* Eliot dicte : avec questionId (par défaut, la dernière question lue), c'est une réponse. */
-    dicter: function (texte, questionId) { dicter(texte, questionId === undefined ? derniereQuestion : questionId); }
+    dicter: function (texte, questionId) { dicter(texte, questionId === undefined ? derniereQuestion : questionId); },
+    /* Mots en direct seuls (tests) : BT.fauxPont.parler('texte', { pas: 250, annule: 'bruit' }). */
+    parler: function (texte, opts) { parler(texte, opts); }
   };
 
   function demarrer() {
@@ -349,18 +352,47 @@
     suiteVocale();
   }
 
-  function dicter(texte, questionId, ensuite) {
-    etatVocal('ecoute', true, questionId);
-    setTimeout(function () {
-      etatVocal('transcription', true, questionId);
+  /* Eliot dicte, comme la coque le joue : mots en direct (bt.vocalDirect, partiels whisper qui grandissent,
+   * avec un premier mot mal compris puis corrigé), transcription, puis « fini » juste avant bt.transcription.
+   * opts : questionId, ensuite, annule (raison : énoncé abandonné), pas (ms entre deux partiels). */
+  var numDirect = 0;
+  function direct(o) { if (window.bt.vocalDirect) window.bt.vocalDirect(o); }
+  function partiels(texte) {
+    var mots = texte.split(/\s+/).filter(Boolean), l = [], n = Math.min(2, mots.length);
+    while (n <= mots.length) {
+      var m = mots.slice(0, n);
+      if (l.length < 2 && m[0].length > 3) m[0] = m[0].slice(0, -2) + 'e'; // whisper se trompe au début
+      l.push(m.join(' '));
+      if (n === mots.length) break;
+      n = Math.min(mots.length, n + 1 + (l.length % 2));
+    }
+    return l;
+  }
+  function parler(texte, opts) {
+    opts = opts || {};
+    var id = ++numDirect, pas = opts.pas != null ? opts.pas : attente(260), l = partiels(texte), i = 0;
+    etatVocal('ecoute', true, opts.questionId);
+    direct({ id: id, etat: 'debut', source: 'mainsLibres' });
+    (function suivant() {
+      if (i < l.length) { direct({ id: id, etat: 'partiel', texte: l[i++] }); setTimeout(suivant, pas); return; }
+      if (opts.annule) {
+        etatVocal('pret', false);
+        direct({ id: id, etat: 'annule', raison: opts.annule });
+        if (opts.ensuite) opts.ensuite();
+        return;
+      }
+      etatVocal('transcription', true, opts.questionId);
+      direct({ id: id, etat: 'transcription' });
       setTimeout(function () {
         etatVocal('pret', false);
-        log('transcription', questionId || '(message)', texte);
-        window.bt.transcription(questionId ? { texte: texte, questionId: questionId } : { texte: texte });
-        if (ensuite) ensuite();
-      }, attente(450));
-    }, attente(1100));
+        log('transcription', opts.questionId || '(message)', texte);
+        direct(opts.questionId ? { id: id, etat: 'fini', texte: texte, questionId: opts.questionId } : { id: id, etat: 'fini', texte: texte });
+        window.bt.transcription(opts.questionId ? { texte: texte, questionId: opts.questionId } : { texte: texte });
+        if (opts.ensuite) opts.ensuite();
+      }, opts.pas != null ? opts.pas * 2 : attente(450));
+    })();
   }
+  function dicter(texte, questionId, ensuite) { parler(texte, { questionId: questionId, ensuite: ensuite }); }
 
   /* Réponse « depuis Telegram » : celle de l'enregistrement si elle existe. */
   function simulerTelegram(msg) {

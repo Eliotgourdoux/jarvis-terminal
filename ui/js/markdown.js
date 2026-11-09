@@ -143,6 +143,84 @@
     return frag;
   };
 
+  /* ---------- Mode vocal : seulement les éléments visuels ----------
+   * Dans un tour vocal, la voix porte la réponse ; l'écran ne montre que ce qui l'illustre : blocs de code
+   * (aperçus html, mermaid, svg, commandes à copier), tableaux, liens, images et vidéos locales citées.
+   * La prose (et la ligne ✅) n'est pas affichée. Pendant l'écriture, un élément n'apparaît qu'une fois
+   * reconnu (bloc ouvert, tableau avec sa ligne de séparation, lien complet). */
+  function fenceFermee(raw) {
+    var l = String(raw || '').replace(/\s+$/, '').split('\n');
+    if (l.length < 2) return false;
+    var o = /^\s*(`{3,}|~{3,})/.exec(l[0]), f = /^\s*(`{3,}|~{3,})\s*$/.exec(l[l.length - 1]);
+    return !!(o && f && f[1].charAt(0) === o[1].charAt(0) && f[1].length >= o[1].length);
+  }
+
+  function morceauxVisuels(md, enCours) {
+    if (!pret || !window.marked.lexer) return [];
+    var toks;
+    try { toks = window.marked.lexer(String(md || '')); } catch (e) { return []; }
+    var res = [], liens = [], vus = Object.create(null);
+    function lien(texte, href) {
+      if (!href || vus[href]) return;
+      vus[href] = 1;
+      liens.push('[' + String(texte || href).replace(/[\[\]]/g, '') + '](' + href.replace(/[()\s]/g, encodeURIComponent) + ')');
+    }
+    function chemin(c) {
+      if (vus[c]) return;
+      vus[c] = 1;
+      liens.push('`' + c + '`');
+    }
+    function enLigne(l) {
+      (l || []).forEach(function (t) {
+        if (!t) return;
+        if (t.type === 'link') lien(t.text, t.href);
+        else if (t.type === 'image') { var m = BT.medias && BT.medias.normaliser(t.href); if (m) chemin(m); }
+        else if (t.type === 'codespan' && BT.medias) { var c = BT.medias.normaliser(t.text); if (c) chemin(c); }
+        if (t.tokens) enLigne(t.tokens);
+      });
+    }
+    function bloc(t, dernier) {
+      if (!t) return;
+      if (t.type === 'code') {
+        var ouvert = t.codeBlockStyle !== 'indented' && !fenceFermee(t.raw);
+        if (t.codeBlockStyle === 'indented') { res.push(t.raw.replace(/\s+$/, '')); return; }
+        res.push('```' + (t.lang || '') + '\n' + t.text + (ouvert ? '' : '\n```'));
+        return;
+      }
+      if (t.type === 'table') {
+        var lignes = t.raw.replace(/\s+$/, '').split('\n').map(function (x) { return x.replace(/^\s+/, ''); });
+        if (dernier && enCours && lignes.length > 2) lignes.pop(); // dernière ligne encore en cours d'écriture
+        res.push(lignes.join('\n'));
+        return;
+      }
+      if (t.type === 'list') { (t.items || []).forEach(function (i) { (i.tokens || []).forEach(function (x) { bloc(x, false); }); }); return; }
+      if (t.type === 'blockquote') { (t.tokens || []).forEach(function (x) { bloc(x, false); }); return; }
+      if (t.type === 'paragraph' || t.type === 'text' || t.type === 'heading') {
+        // Dernier paragraphe encore en cours d'écriture : son lien ou son chemin peut être incomplet.
+        if (dernier && enCours) return;
+        enLigne(t.tokens);
+        if (BT.medias) BT.medias.dansTexte(t.raw).forEach(chemin);
+      }
+    }
+    var n = toks.length;
+    while (n > 0 && toks[n - 1].type === 'space') n--;
+    for (var i = 0; i < n; i++) bloc(toks[i], i === n - 1);
+    // Liens et médias cités dans la prose : regroupés en une liste sous les visuels.
+    if (liens.length) res.push(liens.map(function (x) { return '- ' + x; }).join('\n'));
+    return res;
+  }
+
+  /* md (déjà nettoyé, sans bloc <vocal>) → source markdown des seuls éléments visuels ('' s'il n'y en a pas). */
+  BT.sourceVisuelle = function (md, enCours) { return morceauxVisuels(md, enCours).join('\n\n'); };
+  BT.aDesVisuels = function (md) { return !!BT.sourceVisuelle(md, false).trim(); };
+  BT.rendreVisuels = function (md, opts) {
+    opts = opts || {};
+    var frag = BT.rendreMarkdown(BT.sourceVisuelle(md, !!opts.enCours), opts);
+    var l = frag.querySelector && frag.lastElementChild;
+    if (l && l.tagName === 'UL' && !l.querySelector('.bloc-code, .tableau')) l.classList.add('liens-visuels');
+    return frag;
+  };
+
   function retoucher(frag, dernierOuvert, enCours) {
     // Blocs de code
     var pres = frag.querySelectorAll('pre');

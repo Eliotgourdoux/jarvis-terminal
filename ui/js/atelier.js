@@ -276,15 +276,19 @@
     this.bete = dessinMascotte();
     this.phrase = el('div', 'm-phrase');
     this.detail = el('div', 'm-detail');
-    this.el = el('aside', 'mascotte etat-ecoute anim-ecoute', [
-      this.liens, pile,
-      el('div', 'm-bas', [this.bete, this.phrase, this.detail])
-    ]);
+    this.pile = pile;
+    this.minisEl = el('div', 'm-minis');
+    this.minis = Object.create(null);  // toolUseId de l'agent → { racine, anim, titre, finVu, part }
+    this.plusEl = el('div', 'mini-plus');
+    this.minisEl.appendChild(this.plusEl);
+    this.bas = el('div', 'm-bas', [this.phrase, this.detail, el('div', 'm-scene', [this.bete, this.minisEl])]);
+    this.el = el('aside', 'mascotte etat-ecoute anim-ecoute', [this.liens, pile, this.bas]);
     this.el.setAttribute('aria-hidden', 'true');
 
     var self = this;
     session.on('ajout', function (it) { self._evenement(it, true); });
     session.on('maj', function (it) { self._evenement(it, false); });
+    this._brancherAgents();
     session.on('etat', function (etat) {
       var avant = self._etatSession;
       self._etatSession = etat;
@@ -308,6 +312,9 @@
 
   Mascotte.prototype._evenement = function (it, nouveau) {
     if (it.historique) return;
+    // Les gestes d'un sous-agent appartiennent à son mini Claude, pas aux tentacules de la mascotte.
+    if (it.parent) { this._planifierMinis(); return; }
+    if (it.genre === 'outil' && AGENT[it.nom]) this._planifierMinis();
     if (it.genre === 'eliot') { if (nouveau) this._flasher('reveil', 900); return; }
     if (it.genre === 'compaction') { this._compaction = it.etat === 'encours'; this._planifier(); return; }
     if (it.genre === 'outil') {
@@ -360,8 +367,10 @@
   Mascotte.prototype._derniers = function () {
     var reflechit = false, ecrit = false;
     var items = this.s.items || [];
-    for (var k = items.length - 1, n = 0; k >= 0 && n < 6; k--, n++) {
+    for (var k = items.length - 1, n = 0; k >= 0 && n < 6; k--) {
       var it = items[k];
+      if (it.parent) continue;         // la réflexion d'un sous-agent n'est pas la sienne
+      n++;
       if (it.genre === 'eliot') break;
       if (it.genre === 'reflexion' && it.enCours) reflechit = it;
       if (it.genre === 'texte' && it.enCours) ecrit = true;
@@ -393,12 +402,6 @@
           else prochain = Math.min(prochain, COMMANDE_LONGUE - ecoule);
         }
         if (nbTouches > 1) { classes += ' plusieurs'; phrase = 'Fait ' + nbTouches + ' choses à la fois'; }
-        // Un agent tourne en même temps (ou c'est lui qui agit) : son petit double reste à côté, quelle que soit
-        // la pose principale (clavier, sablier, loupe…). Demande d'Eliot, 09/11/2026.
-        if (anim !== 'bebe') {
-          var agentActif = !!touche.it.parent || this.cases.some(function (c) { return c.touche && c.it && (AGENT[c.it.nom] || c.it.nom === 'Workflow'); });
-          if (agentActif) classes += ' avec-bebe';
-        }
       }
       else if (d.reflechit) {
         etat = 'reflechit'; anim = 'pense'; phrase = 'Réfléchit…';
@@ -431,6 +434,7 @@
       this.parOutil = Object.create(null);
     }
 
+    if (this._nbMinis) classes += ' avec-minis';
     this.el.className = 'mascotte etat-' + etat + ' anim-' + anim + classes;
     this.phrase.textContent = phrase;
     this.detail.textContent = detail;
@@ -478,5 +482,181 @@
       }
       t.classList.toggle('tendue', tendue);
     }
+  };
+
+  /* ================= Les mini Claude (demande d'Eliot, 09/11/2026) ================= */
+  /* Un petit Claude par sous-agent actif (premier plan ou fond), posé à côté de la mascotte. Chacun mime sa
+   * dernière action : clavier (Edit, Write, Bash), livre (Read), loupe (Grep, Glob), globe (web), points ou
+   * sablier quand il réfléchit ou attend. À la fin, un saut et une coche, puis il s'efface. Le JS ne pose que
+   * des classes à chaque changement ; tout le mouvement est en CSS.
+   * Sources : BT.app.agents.suivis (agents.js : appels Agent en cours + étapes lues par SuiviAgents.swift)
+   * et les appels d'outils du sous-agent relayés dans le flux (item.parent = toolUseId de l'agent). */
+  var MAX_MINIS = 4;
+  var MINI_FINI = 1700, MINI_FONDU = 600;
+  var MINI_RECENT = 15000;          // étape (lue par la coque) plus vieille que ça : il réfléchit
+  var MINI_CLAVIER = { Edit: 1, MultiEdit: 1, Write: 1, NotebookEdit: 1, Bash: 1, PowerShell: 1 };
+  var MINI_LIVRE = { Read: 1, NotebookRead: 1, Skill: 1 };
+  var MINI_LOUPE = { Grep: 1, Glob: 1, ToolSearch: 1 };
+  var VERBES_MINI = {
+    Read: 'Lit', NotebookRead: 'Lit', Write: 'Écrit', Edit: 'Modifie', MultiEdit: 'Modifie', NotebookEdit: 'Modifie',
+    Bash: 'Lance', PowerShell: 'Lance', Grep: 'Cherche', Glob: 'Liste', ToolSearch: 'Cherche un outil',
+    WebSearch: 'Recherche', WebFetch: 'Lit la page', Skill: 'Ouvre le skill'
+  };
+
+  var DESSIN_MINI =
+    '<g class="mn-g">' +
+      '<rect x="10" y="33" width="4" height="8" class="mn-corps"/><rect x="16" y="33" width="4" height="8" class="mn-corps"/>' +
+      '<rect x="32" y="33" width="4" height="8" class="mn-corps"/><rect x="38" y="33" width="4" height="8" class="mn-corps"/>' +
+      '<rect x="8" y="11" width="36" height="23" class="mn-corps"/>' +
+      '<rect x="2" y="20" width="7" height="7" class="mn-corps mn-bras-g"/><rect x="43" y="20" width="7" height="7" class="mn-corps mn-bras-d"/>' +
+      '<g class="mn-yeux"><rect x="17" y="16" width="4" height="8" class="mn-oeil"/><rect x="31" y="16" width="4" height="8" class="mn-oeil"/></g>' +
+      // livre tenu devant lui
+      '<g class="mn-prop mp-livre"><path d="M11 26 l15 -3 v12 l-15 3 z" class="mn-papier"/><path d="M26 23 l15 3 v12 l-15 -3 z" class="mn-papier"/>' +
+        '<path d="M14 29 l9 -2 M14 32.5 l9 -2" class="mn-ligne"/><path d="M26 23 l15 3 v12 l-15 -3 z" class="mn-page"/></g>' +
+      // clavier posé devant lui
+      '<g class="mn-prop mp-clavier"><rect x="3" y="34" width="46" height="9.5" rx="2" class="mn-clavier"/>' +
+        [0, 1, 2, 3, 4, 5, 6].map(function (i) { return '<rect x="' + (6 + i * 6) + '" y="36" width="4" height="2.4" rx=".6" class="mn-touche t' + i + '"/>'; }).join('') +
+        '<rect x="14" y="39.8" width="24" height="2.2" rx=".6" class="mn-touche t7"/></g>' +
+    '</g>' +
+    '<g class="mn-prop mp-points"><circle cx="15" cy="3" r="3" class="mn-point p0"/><circle cx="26" cy="3" r="3" class="mn-point p1"/><circle cx="37" cy="3" r="3" class="mn-point p2"/></g>' +
+    '<g class="mn-prop mp-sablier"><g class="mn-sablier-g"><path d="M51 -3 h10 M51 13 h10 M52 -3 c0 5 4 5 4 8 c0 3 -4 3 -4 8 M60 -3 c0 5 -4 5 -4 8 c0 3 4 3 4 8" class="mn-sablier"/>' +
+      '<path d="M53.5 -1 h5 l-2.5 4 z" class="mn-sable"/><path d="M56 9 l3 3 h-6 z" class="mn-sable"/></g></g>' +
+    '<g class="mn-prop mp-loupe"><g class="mn-loupe-g"><circle cx="55" cy="11" r="6.5" class="mn-verre"/><path d="M59.8 15.8 L64 20" class="mn-manche"/></g></g>' +
+    '<g class="mn-prop mp-globe"><path d="M45 -4 a8 8 0 0 1 4 -4 M42 -7 a12 12 0 0 1 6 -5" class="mn-onde"/>' +
+      '<circle cx="55" cy="9" r="7.5" class="mn-globe"/><ellipse cx="55" cy="9" rx="3.8" ry="7.5" class="mn-meridien"/><path d="M47.5 9 h15" class="mn-equateur"/></g>' +
+    '<g class="mn-prop mp-coche"><path d="M16 1 l6 6 l13 -13" pathLength="1" class="mn-coche"/></g>';
+
+  function dessinMini() {
+    var d = svg('svg', { class: 'mn-bete', viewBox: '-2 -12 68 58', width: 40, height: 34 });
+    d.innerHTML = DESSIN_MINI;
+    return d;
+  }
+
+  Mascotte.prototype._brancherAgents = function () {
+    var ag = BT.app && BT.app.agents, self = this;
+    if (!ag || ag._miniBranche) return;
+    ag._miniBranche = true;
+    // Le panneau « agents au travail » se redessine à chaque nouvelle donnée et à chaque seconde : on suit le même pas.
+    var rendre = ag.rendre;
+    ag.rendre = function () { var r = rendre.apply(this, arguments); self._planifierMinis(); return r; };
+  };
+
+  Mascotte.prototype._planifierMinis = function () {
+    if (this._rafMinis) return;
+    var self = this;
+    function go() {
+      clearTimeout(self._secMinis); cancelAnimationFrame(self._rafMinis); self._rafMinis = 0;
+      self._majMinis();
+    }
+    this._rafMinis = requestAnimationFrame(go);
+    this._secMinis = setTimeout(go, 250);   // fenêtre cachée : pas de requestAnimationFrame
+  };
+
+  /* Ce que fait l'agent en ce moment : { anim, action }. */
+  Mascotte.prototype._etatMini = function (id, a, maintenant) {
+    var s = this.s, o = (a && a.o) || (s._outils && s._outils[id]) || {};
+    var der = null, enCours = false, debut = 0, pense = false;
+    // 1. Ses appels relayés dans le flux (statut exact : en cours ou fini).
+    var enfants = o.enfants || [];
+    for (var k = enfants.length - 1; k >= 0; k--) {
+      var it = s.item ? s.item(enfants[k]) : null;
+      if (!it) continue;
+      if (it.genre === 'outil') {
+        der = { n: it.nom, e: entreeDe(it) };
+        enCours = it.statut === 'prepare' || it.statut === 'encours';
+        debut = it.debut || 0;
+        break;
+      }
+      if (it.genre === 'reflexion' || it.genre === 'texte') pense = true;
+    }
+    // 2. Ses étapes lues par la coque (SuiviAgents.swift), souvent plus fraîches pour un agent de fond.
+    var et = a && a.etapes && a.etapes[a.etapes.length - 1];
+    if (et) {
+      var t = Date.parse(et.t || '') || 0;
+      if (!der || t > debut) {
+        der = { n: et.n, e: et.e || {} }; debut = t; pense = false;
+        enCours = !t || maintenant - t < MINI_RECENT || !!COMMANDE[et.n];
+      }
+    }
+    var anim = 'pense', n = der && der.n;
+    if (der && enCours && !pense) {
+      if (COMMANDE[n] && debut && maintenant - debut >= COMMANDE_LONGUE) anim = 'sablier';
+      else if (MINI_CLAVIER[n]) anim = 'clavier';
+      else if (MINI_LIVRE[n]) anim = 'livre';
+      else if (MINI_LOUPE[n]) anim = 'loupe';
+      else if (WEB[n]) anim = 'globe';
+    }
+    var action = 'Démarre…';
+    if (der) {
+      var it2 = { nom: n, entree: der.e }, cible = '';
+      try { cible = nomDe(it2); } catch (e) { cible = ''; }
+      if (cible === n) cible = '';
+      if (cible.length > 90) cible = cible.slice(0, 89) + '…';
+      action = (VERBES_MINI[n] || phraseDe(it2)) + (cible ? ' ' + cible : '');
+      if (anim === 'pense') action = 'Réfléchit · dernière action : ' + action;
+      else if (anim === 'sablier') action = 'Attend la fin de : ' + action;
+    }
+    return { anim: anim, action: action };
+  };
+
+  Mascotte.prototype._majMinis = function () {
+    var ag = BT.app && BT.app.agents;
+    if (!ag) return;
+    this._brancherAgents();
+    clearTimeout(this._minuteurMinis);
+    this._partis = this._partis || Object.create(null);
+    var self = this, maintenant = Date.now(), prochain = Infinity;
+    var suivis = ag.suivis || {};
+    var ids = Object.keys(suivis).filter(function (id) { return suivis[id].confirme && !self._partis[id]; });
+    ids.sort(function (x, y) { return ((suivis[x].o || {}).debut || 0) - ((suivis[y].o || {}).debut || 0); });
+    var visibles = ids.slice(0, MAX_MINIS), reste = ids.slice(MAX_MINIS);
+    var tous = visibles.concat(Object.keys(this.minis).filter(function (id) { return visibles.indexOf(id) < 0; }));
+
+    tous.forEach(function (id) {
+      var a = suivis[id], m = self.minis[id];
+      if (!m) {
+        var i = self._compteMini = (self._compteMini || 0) + 1;
+        m = self.minis[id] = { racine: el('div', 'mini v' + (i % 4)), anim: '', titre: '', v: 'v' + (i % 4) };
+        m.racine.appendChild(dessinMini());
+        self.minisEl.insertBefore(m.racine, self.plusEl);
+      }
+      var o = (a && a.o) || {}, e = o.entree || {};
+      var desc = e.description || e.subagent_type || m.desc || 'Sous-agent';
+      m.desc = desc;
+      var anim, action;
+      if (!a || a.fini || visibles.indexOf(id) < 0) {
+        if (!m.finVu) m.finVu = maintenant;
+        var t = maintenant - m.finVu;
+        if (t >= MINI_FINI + MINI_FONDU) { m.racine.remove(); delete self.minis[id]; self._partis[id] = 1; return; }
+        m.part = t >= MINI_FINI;
+        prochain = Math.min(prochain, (m.part ? MINI_FINI + MINI_FONDU : MINI_FINI) - t);
+        anim = 'fini'; action = 'Terminé';
+      } else {
+        var et = self._etatMini(id, a, maintenant);
+        anim = et.anim; action = et.action;
+      }
+      var classe = 'mini ' + m.v + ' mf-' + anim + (m.part ? ' part' : '');
+      if (m.racine.className !== classe) m.racine.className = classe;
+      var titre = desc + '\n' + action;
+      if (m.titre !== titre) { m.titre = titre; m.racine.title = titre; }
+    });
+
+    var enPlus = reste.filter(function (id) { return !suivis[id].fini; });
+    this.plusEl.hidden = !enPlus.length;
+    this.plusEl.textContent = enPlus.length ? '+' + enPlus.length : '';
+    this.plusEl.title = enPlus.map(function (id) {
+      var e = (suivis[id].o || {}).entree || {};
+      return e.description || e.subagent_type || 'Sous-agent';
+    }).join('\n');
+
+    var nb = Object.keys(this.minis).length;
+    if (nb !== this._nbMinis) {
+      this._nbMinis = nb;
+      this.el.classList.toggle('avec-minis', !!nb);
+    }
+    // Si les mini Claude passent sur deux rangs (marge étroite), la pile des cases remonte d'autant.
+    var bas = Math.max(104, this.bas.offsetHeight + 10);
+    if (bas !== this._basPile) { this._basPile = bas; this.pile.style.bottom = bas + 'px'; this._tracer(); }
+    if (prochain < Infinity) this._minuteurMinis = setTimeout(function () { self._planifierMinis(); }, Math.max(0, prochain) + 30);
   };
 })();

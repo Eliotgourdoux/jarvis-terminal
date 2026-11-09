@@ -18,27 +18,39 @@
     return String(t == null ? '' : t).replace(RE_OSC, '').replace(RE_ANSI, '').replace(/\u001b/g, '');
   };
 
-  /* Mode vocal : Claude termine sa réponse par <vocal>…</vocal> (ce qui sera dit à voix haute).
-   * Le bloc n'est jamais affiché ; pendant l'écriture, une balise ouverte masque la suite. */
+  /* Mode vocal : la réponse finale de Claude commence par <vocal>…</vocal> (ce que Jarvis dit à voix haute),
+   * suivi des seuls éléments visuels (aperçus, schémas, code à copier, liens, médias, tableaux).
+   * Le bloc n'est jamais affiché dans le texte ; pendant l'écriture, une balise ouverte masque la suite. */
   var RE_VOCAL = /<vocal>([\s\S]*?)(?:<\/vocal>|$)/i;
+  var RE_VOCAL_FERME = /<vocal>([\s\S]*?)<\/vocal>/i;
   var RE_VOCAL_TOUS = /\n*[ \t]*<vocal>[\s\S]*?(?:<\/vocal>[ \t]*|$)/gi;
   var RE_VOCAL_DEBUT = /\n*[ \t]*<v(?:o(?:c(?:a(?:l)?)?)?)?$/i; // balise en cours d'écriture
   BT.texteVocal = function (t) {
     var m = RE_VOCAL.exec(String(t == null ? '' : t));
     return m ? m[1].trim() : '';
   };
+  /* Texte du bloc <vocal> seulement s'il est fermé (pendant l'écriture : '' tant que </vocal> n'est pas là). */
+  BT.texteVocalFerme = function (t) {
+    var m = RE_VOCAL_FERME.exec(String(t == null ? '' : t));
+    return m ? m[1].trim() : '';
+  };
+  BT.aBlocVocal = function (t) { return /<vocal>/i.test(String(t == null ? '' : t)); };
   BT.sansVocal = function (t) {
     return String(t == null ? '' : t).replace(RE_VOCAL_TOUS, '').replace(RE_VOCAL_DEBUT, '');
   };
 
-  /* Consigne ajoutée aux messages envoyés quand le mode vocal est actif (invisible dans le fil). */
+  /* Consigne ajoutée aux messages envoyés quand le mode vocal est actif (invisible dans le fil).
+   * Elle part avec chaque message : elle doit rester courte. */
   var RE_CONSIGNE_VOCALE = /\n*<mode-vocal>[\s\S]*?<\/mode-vocal>\s*/g;
-  BT.CONSIGNE_VOCALE = '<mode-vocal>Mode vocal Jarvis actif : Eliot t’écoute et ne regarde pas l’écran. '
-    + 'Fais le travail normalement et garde ta réponse écrite. Juste avant la ligne ✅, ajoute un bloc <vocal>…</vocal> : '
-    + 'ce que tu lui dirais à l’oral, comme un collègue au téléphone, en une à trois phrases courtes. '
-    + 'Ces phrases doivent se comprendre sans l’écran ni le reste du fil : rappelle de quoi il s’agit, '
-    + 'dis le résultat ou ce qui a changé, et pose clairement la question s’il doit trancher quelque chose. '
-    + 'Tutoiement, français parlé naturel, sans markdown, sans chemin de fichier, sans code, sans emoji ni liste.</mode-vocal>';
+  BT.CONSIGNE_VOCALE = '<mode-vocal>Mode vocal Jarvis : Eliot t’écoute, ta voix est ta réponse et l’écran ne fait que l’illustrer. '
+    + 'Fais le travail normalement. Ta réponse finale commence par un seul bloc <vocal>…</vocal>, lu à voix haute dès sa fermeture : '
+    + 'ce que tu lui dis à l’oral, une à trois phrases courtes qui se comprennent seules (le sujet, le résultat, la question à trancher), '
+    + 'tutoiement, français parlé, sans markdown, chemin, code ni emoji. '
+    + 'Ensuite, uniquement ce qui aide à l’écran : bloc ```html apercu (animation ou schéma léger, autonome, rapide à écrire), '
+    + 'mermaid ou svg, commande ou code à copier dans un bloc de code, lien, chemin d’image ou de vidéo, tableau si c’est vraiment plus clair. '
+    + 'Aucune prose qui répète la voix : le texte hors de ces éléments n’est pas affiché. Si rien de visuel n’aide, n’écris rien d’autre. '
+    + 'La voix peut renvoyer à l’écran (« je te mets la commande »). Termine quand même par la ligne ✅, elle sera masquée.</mode-vocal>';
+  BT.aConsigneVocale = function (t) { return /<mode-vocal>[\s\S]*?<\/mode-vocal>/.test(String(t == null ? '' : t)); };
   BT.sansConsigneVocale = function (t) {
     return String(t == null ? '' : t).replace(RE_CONSIGNE_VOCALE, '\n').trim();
   };

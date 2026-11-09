@@ -88,7 +88,10 @@ summary.atelier:hover .chevron, details.activite[open] > summary.atelier .chevro
   font: 500 11.5px/1.35 var(--police); color: var(--dim);
 }
 .m-detail { font-weight: 400; font-size: 11px; color: var(--faint); }
-.m-bete { order: 3; display: block; margin-top: 2px; overflow: visible; }
+.m-bete { display: block; margin-top: 2px; overflow: visible; }
+/* La mascotte et ses mini Claude, côte à côte sur le même sol ; s'il manque de place, ils passent au-dessus. */
+.m-scene { order: 3; display: flex; align-items: flex-start; flex-wrap: wrap-reverse; gap: 4px 2px; max-width: 100%; }
+/* (wrap-reverse : « flex-start » veut dire « posé en bas ».) */
 .m-corps { fill: var(--claude); }
 .m-oeil { fill: var(--fond); transform-box: fill-box; transform-origin: center; transition: transform .15s ease-out; }
 .m-yeux { transition: transform .25s ease-out; }
@@ -166,7 +169,7 @@ summary.atelier:hover .chevron, details.activite[open] > summary.atelier .chevro
 @keyframes m-feuillette { 0%, 30% { transform: none; } 60%, 100% { transform: scaleX(-1); } }
 @keyframes m-visse { 0% { transform: rotate(-25deg); } 100% { transform: rotate(15deg); } }
 @keyframes m-flotte { 0%, 100% { transform: none; } 50% { transform: translateY(-1.5px); } }
-@keyframes m-pense { 0%, 15% { opacity: .25; } 35%, 70% { opacity: 1; } 100% { opacity: .25; } }
+@keyframes m-pense { 0%, 60%, 100% { opacity: .3; transform: none; } 25% { opacity: 1; transform: translateY(-2.2px); } }
 @keyframes m-rebond { 0%, 100% { transform: none; } 50% { transform: translateY(-2.5px); } }
 @keyframes m-tremble { 0%, 100% { transform: none; } 25% { transform: translateX(-1.5px); } 75% { transform: translateX(1.5px); } }
 @keyframes m-goutte { 0% { opacity: 0; transform: translateY(-2px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(9px); } }
@@ -228,8 +231,9 @@ summary.atelier:hover .chevron, details.activite[open] > summary.atelier .chevro
 /* 15. Réflexion : bulle de pensée, points en cascade, regard en l'air. */
 .anim-pense .m-yeux { transform: translate(1px, -3px); }
 .anim-pense .p-pense { animation: m-flotte 2.4s ease-in-out infinite; }
-.anim-pense .pr-point { animation: m-pense 1.8s ease-out infinite; }
-.anim-pense .d1 { animation-delay: .25s; } .anim-pense .d2 { animation-delay: .5s; }
+/* Les points sautent l'un après l'autre (avant : un simple fondu, qui paraissait figé). */
+.anim-pense .pr-point { transform-box: fill-box; animation: m-pense 1.2s ease-in-out infinite; }
+.anim-pense .d1 { animation-delay: .18s; } .anim-pense .d2 { animation-delay: .36s; }
 /* 15 bis. Réflexion longue : la tête gonfle et pulse, les yeux se plissent, marque d'effort ; au-delà, elle fume. */
 .anim-concentre .p-effort, .anim-concentre.fort .p-fumee { display: inline; }
 .pr-effort { fill: none; stroke: var(--rouge); stroke-width: 1.4; stroke-linecap: round; transform-box: fill-box; transform-origin: center; }
@@ -348,3 +352,118 @@ summary.atelier:hover .chevron, details.activite[open] > summary.atelier .chevro
 .avec-bebe .p-bebe { transform: translate(58.5px, 30px) scale(.8) translate(-48px, -27px); }
 .avec-bebe .pr-bebe-g { animation: m-sautille .5s steps(1, end) infinite; }
 @media (prefers-reduced-motion: reduce) { .avec-bebe .pr-bebe-g { animation: none; } }
+
+/* ================= Les mini Claude : un par sous-agent (demande d'Eliot, 09/11/2026) ================= */
+/* Classes propres (mn-…) : les poses de la grande mascotte (anim-…) ne doivent pas les toucher. */
+.m-minis { display: flex; align-items: flex-start; flex-wrap: wrap-reverse; gap: 2px 3px; min-width: 0; }
+.mini {
+  position: relative; flex: none; pointer-events: auto; cursor: default;
+  transition: opacity .6s ease-out, transform .6s ease-out;
+  animation: mn-arrive .4s cubic-bezier(.3, 1.5, .6, 1);
+  transform-origin: center bottom;
+}
+.mini.part { opacity: 0; transform: translateY(-5px) scale(.85); }
+.mn-bete { display: block; overflow: visible; }
+.mn-corps { fill: var(--claude); }
+.mn-oeil { fill: var(--fond); transform-box: fill-box; transform-origin: center; }
+.mn-g, .mn-yeux, .mn-bras-g, .mn-bras-d { transform-box: fill-box; }
+.mn-g { transform-origin: center bottom; }
+.mn-yeux { transition: transform .25s ease-out; }
+.mn-prop { display: none; }
+.mini-plus {
+  flex: none; align-self: center; margin-left: 2px; padding: 1px 6px; border-radius: 9px;
+  font: 600 10.5px/1.4 var(--police); color: var(--claude); background: var(--claude-fond);
+  pointer-events: auto; cursor: default;
+}
+.mini-plus[hidden] { display: none; }
+
+/* Accessoires */
+.mn-papier { fill: #D9D4E8; }
+.mn-page { fill: #EFEBFA; stroke: #8F89A6; stroke-width: .6; transform-box: fill-box; transform-origin: left center; }
+.mn-ligne { fill: none; stroke: #8F89A6; stroke-width: 1.2; stroke-linecap: round; }
+.mn-clavier { fill: var(--surface-3); stroke: #6E6884; stroke-width: 1; }
+.mn-touche { fill: #8F89A6; }
+.mn-point { fill: #CFCBE0; transform-box: fill-box; opacity: .35; }
+.mn-sablier { fill: none; stroke: #CFCBE0; stroke-width: 1.6; stroke-linecap: round; }
+.mn-sable { fill: var(--ambre); }
+.mn-sablier-g { transform-box: fill-box; transform-origin: center; }
+.mn-verre { fill: rgba(160, 200, 255, .16); stroke: #CFCBE0; stroke-width: 2.2; }
+.mn-manche { fill: none; stroke: #CFCBE0; stroke-width: 3.2; stroke-linecap: round; }
+.mn-globe { fill: #16202E; stroke: var(--lien); stroke-width: 1.8; }
+.mn-meridien { fill: none; stroke: var(--lien); stroke-width: 1.4; transform-box: fill-box; transform-origin: center; }
+.mn-equateur { fill: none; stroke: var(--lien); stroke-width: 1.2; }
+.mn-onde { fill: none; stroke: var(--lien); stroke-width: 1.6; stroke-linecap: round; opacity: .5; }
+.mn-coche { fill: none; stroke: var(--vert); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1 1; stroke-dashoffset: 1; }
+
+.mf-pense .mp-points, .mf-sablier .mp-sablier, .mf-clavier .mp-clavier, .mf-livre .mp-livre,
+.mf-loupe .mp-loupe, .mf-globe .mp-globe, .mf-fini .mp-coche { display: inline; }
+
+/* Poses : où regardent les yeux, où sont les bras. */
+.mf-pense .mn-yeux { transform: translate(0, -3px); }
+.mf-sablier .mn-yeux { transform: translate(3px, -3px); }
+.mf-clavier .mn-yeux { transform: translate(0, 2.5px); }
+.mf-clavier .mn-bras-g { transform: translate(4px, 9px); }
+.mf-clavier .mn-bras-d { transform: translate(-4px, 9px); }
+.mf-livre .mn-yeux { transform: translate(0, 2.5px); }
+.mf-livre .mn-bras-g { transform: translate(5px, 6px); }
+.mf-livre .mn-bras-d { transform: translate(-5px, 6px); }
+.mf-loupe .mn-yeux, .mf-globe .mn-yeux { transform: translate(3px, -1px); }
+.mf-loupe .mn-bras-d, .mf-globe .mn-bras-d { transform: translate(0, -3px); }
+.mf-fini .mn-yeux { transform: translate(0, -1px); }
+.mf-fini .mn-oeil { transform: scaleY(.35); }   /* yeux plissés de contentement */
+
+/* Gestes */
+@keyframes mn-arrive { 0% { opacity: 0; transform: translateY(6px) scale(.5); } 100% { opacity: 1; transform: none; } }
+@keyframes mn-rebond { 0%, 100% { transform: none; } 50% { transform: translateY(-2px); } }
+@keyframes mn-point { 0%, 60%, 100% { opacity: .35; transform: none; } 25% { opacity: 1; transform: translateY(-3.5px); } }
+@keyframes mn-tape-g { 0%, 100% { transform: translate(4px, 9px); } 50% { transform: translate(4px, 11.5px); } }
+@keyframes mn-tape-d { 0%, 100% { transform: translate(-4px, 11.5px); } 50% { transform: translate(-4px, 9px); } }
+@keyframes mn-onde { 0%, 100% { opacity: .15; } 50% { opacity: .9; } }
+@keyframes mn-saut { 0%, 100% { transform: none; } 35% { transform: translateY(-8px); } 60% { transform: translateY(1px); } }
+@keyframes mn-dessine { 0% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }
+
+/* Petit rebond et clignement, décalés d'un mini à l'autre pour qu'ils ne bougent pas en chœur. */
+.mini .mn-g { animation: mn-rebond .9s steps(1, end) infinite; }
+.mini .mn-oeil { animation: m-cligne 4.4s ease-in-out infinite; }
+.mini.v1 .mn-g { animation-delay: -.3s; } .mini.v1 .mn-oeil { animation-delay: -1.6s; }
+.mini.v2 .mn-g { animation-delay: -.55s; } .mini.v2 .mn-oeil { animation-delay: -2.9s; }
+.mini.v3 .mn-g { animation-delay: -.15s; } .mini.v3 .mn-oeil { animation-delay: -3.7s; }
+
+/* Réfléchit : trois points qui sautent l'un après l'autre. */
+.mf-pense .mn-point { animation: mn-point 1.2s ease-in-out infinite; }
+.mf-pense .p1 { animation-delay: .18s; } .mf-pense .p2 { animation-delay: .36s; }
+/* Attend (commande longue) : le sablier se retourne. */
+.mf-sablier .mn-g { animation-duration: 1.8s; }
+.mf-sablier .mn-sablier-g { animation: m-retourne 2.4s ease-in-out infinite; }
+/* Tape : assis devant son clavier, les deux bras tapent en alternance, les touches s'allument. */
+.mf-clavier .mn-g { animation: none; }
+.mf-clavier .mn-bras-g { animation: mn-tape-g .3s steps(1, end) infinite; }
+.mf-clavier .mn-bras-d { animation: mn-tape-d .3s steps(1, end) infinite; }
+.mf-clavier .mn-touche { animation: m-touche .9s steps(1, end) infinite; }
+.mf-clavier .t4 { animation-delay: .12s; } .mf-clavier .t1 { animation-delay: .24s; } .mf-clavier .t6 { animation-delay: .36s; }
+.mf-clavier .t7 { animation-delay: .48s; } .mf-clavier .t2 { animation-delay: .6s; } .mf-clavier .t5 { animation-delay: .72s; }
+.mf-clavier .t3 { animation-delay: .3s; }
+/* Lit : il feuillette son livre. */
+.mf-livre .mn-g { animation-duration: 1.8s; }
+.mf-livre .mn-page { animation: m-feuillette 1.6s ease-in-out infinite; }
+/* Cherche : la loupe balaie. */
+.mf-loupe .mn-loupe-g { animation: m-scrute 1.4s ease-in-out infinite alternate; }
+/* Web : le globe tourne, les ondes clignotent. */
+.mf-globe .mn-meridien { animation: m-tourne 1.6s linear infinite; }
+.mf-globe .mn-onde { animation: mn-onde 1.2s ease-in-out infinite; }
+.mf-globe .mn-onde + .mn-onde { animation-delay: .3s; }
+/* Fini : un saut, une coche verte, puis il s'efface (classe « part »). */
+.mf-fini .mn-g { animation: mn-saut .55s ease-out 2; }
+.mf-fini .mn-oeil { animation: none; }
+.mf-fini .mn-coche { animation: mn-dessine .35s ease-out .1s forwards; }
+
+/* La grande mascotte regarde ses petits ; le petit double « bébé » cède la place aux mini Claude. */
+.avec-minis .p-bebe { display: none; }
+.avec-minis.anim-bebe .m-yeux { transform: translate(3px, 1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mini { transition: none; animation: none; }
+  .mn-point { opacity: 1; }
+  .mn-onde { opacity: .7; }
+  .mn-coche { stroke-dashoffset: 0; }
+}

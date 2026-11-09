@@ -1,7 +1,7 @@
 /* Better Terminal For Claude — pont page ↔ Swift (voir CONTRAT.md).
  * Page → Swift : window.webkit.messageHandlers.bt.postMessage({type, ...}).
  * Swift → page : window.bt.info / depuisClaude / stderr / fin / reponseExterne / historique / envoyerTexte
- *                / vocalEtat / transcription.
+ *                / vocalEtat / transcription / vocalDirect.
  * Les appels reçus avant que l'application soit prête sont mis en file. */
 (function () {
   'use strict';
@@ -57,6 +57,8 @@
     // Mode vocal « Jarvis » (CONTRAT.md) : état commun du micro et de la voix, texte dicté pour cette session.
     vocalEtat: appel('vocalEtat'),
     transcription: appel('transcription'),
+    // Mots d'Eliot en direct pendant un énoncé du mode vocal (js/vocal-direct.js).
+    vocalDirect: appel('vocalDirect'),
     // Fichiers joints (bouton, Finder, collage) : chemins réels lus par la coque.
     fichiers: appel('fichiers'),
     dictee: appel('dictee'),

@@ -12,6 +12,8 @@
   app.interface = new BT.Interface(app);
   app.vocal = new BT.VueVocal(app);
   app.agents = new BT.Agents(app);
+  // Mode vocal : les mots d'Eliot apparaissent en direct pendant qu'il parle (bt.vocalDirect).
+  app.vocalDirect = BT.VocalDirect ? new BT.VocalDirect(app) : null;
   // La mascotte vit dans la marge de gauche, hors du fil : une seule pour toute la session.
   app.mascotte = new BT.Mascotte(session);
   document.body.appendChild(app.mascotte.el);
@@ -57,8 +59,12 @@
     dictee: function (d) { if (app.interface.recevoirDictee) app.interface.recevoirDictee(d); },
     todo: function (d) { if (BT.todo) BT.todo.recevoir(d); },
     agents: function (l) { if (app.agents) app.agents.recevoir(l); },
+    vocalDirect: function (d) { if (app.vocalDirect) app.vocalDirect.recevoir(d); },
     transcription: function (d) {
+      // La bulle fantôme des mots en direct cède sa place à la vraie bulle, sans doublon ni saut.
+      var direct = app.vocalDirect && app.vocalDirect.avantTranscription(d);
       var r = session.transcription(d);
+      if (direct) app.vocalDirect.apresTranscription(direct, r);
       if (r && r.genre === 'eliot') app.defilement.allerEnBas();
       return !!r;
     }

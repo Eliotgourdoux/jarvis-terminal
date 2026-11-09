@@ -317,31 +317,82 @@
 
   VueFil.prototype._rendreTexte = function (it, n) {
     var src = BT.nettoyerTexteClaude(it.texte);
-    if (!src.trim()) { n.hidden = true; return; }
+    var vocal = !!it.vocal, dit = vocal ? BT.texteVocalFerme(it.texte) || (it.enCours ? '' : BT.texteVocal(it.texte)) : '';
+    // Tour vocal : visible tant qu'il s'écrit (curseur), puis seulement s'il y a la voix ou un visuel.
+    var vide = vocal ? (!it.enCours && !dit && !BT.aDesVisuels(src)) : !src.trim();
+    if (vide) { n.hidden = true; if (n._ecr) this._finirEcriture(n); n._src = null; return; }
     n.hidden = false;
     n.classList.toggle('est-erreur', !!it.erreur);
     n.classList.toggle('en-cours', !!it.enCours);
+    n.classList.toggle('texte-vocal', vocal);
     if (n._ecr) {
       // Interruption, erreur, fenêtre cachée ou mouvement réduit : tout le texte d'un coup.
       if (it.interrompu || it.erreur || document.hidden || mouvementReduit()) this._finirEcriture(n);
-      else { this._cibleEcriture(n, src); return; }
+      else { if (n._dit !== dit) { n._dit = dit; n._ecr.k = -1; } this._cibleEcriture(n, src); return; }
     }
-    if (n._src === src && n._enCours === !!it.enCours && n._interrompu === !!it.interrompu) return;
-    n._src = src; n._enCours = !!it.enCours; n._interrompu = !!it.interrompu;
-    var frag = BT.rendreMarkdown(src, { enCours: it.enCours });
+    if (n._src === src && n._enCours === !!it.enCours && n._interrompu === !!it.interrompu && n._vocal === vocal && n._dit === dit) return;
+    n._src = src; n._enCours = !!it.enCours; n._interrompu = !!it.interrompu; n._vocal = vocal; n._dit = dit;
     // Écriture en direct sans animation (mouvement réduit) : un curseur fixe tant que le bloc s'écrit.
-    if (it.enCours && !it.historique) ajouterCurseur(frag);
+    var frag = this._fragTexte(it, n, src, !!it.enCours, it.enCours && !it.historique, !it.enCours);
     // Texte coupé net : des points de suspension suffisent (la note « Interrompu par Eliot » et la fin du tour le disent déjà).
-    if (it.interrompu) {
+    if (it.interrompu && !vocal) {
       var dernier = frag.lastElementChild;
       if (dernier && dernier.tagName === 'P') dernier.appendChild(document.createTextNode(' …'));
     }
-    // Lecteur intégré (images, vidéos, sons locaux cités), une fois le texte complet : pas de rechargement à chaque delta.
-    if (!it.enCours && BT.medias) {
-      var lec = BT.medias.pour(frag);
-      if (lec) frag.appendChild(lec);
-    }
     n.replaceChildren(frag);
+  };
+
+  /* Contenu d'un bloc de texte. Normal : le markdown rendu. Tour vocal : la ligne repliée « Jarvis a dit »
+   * (une fois le bloc <vocal> fermé), puis les seuls éléments visuels (markdown.js, BT.rendreVisuels).
+   * curseur : curseur d'écriture au bout ; medias : lecteurs des images et vidéos citées (texte complet seulement). */
+  VueFil.prototype._fragTexte = function (it, n, src, enCours, curseur, medias) {
+    var vis = it.vocal ? BT.rendreVisuels(src, { enCours: enCours }) : BT.rendreMarkdown(src, { enCours: enCours });
+    if (curseur) ajouterCurseur(vis);
+    // Lecteur intégré (images, vidéos, sons locaux cités), une fois le texte complet : pas de rechargement à chaque delta.
+    if (medias && BT.medias) {
+      var lec = BT.medias.pour(vis);
+      if (lec) vis.appendChild(lec);
+    }
+    if (!it.vocal) return vis;
+    var frag = document.createDocumentFragment();
+    var dit = BT.texteVocalFerme(it.texte) || (it.enCours ? '' : BT.texteVocal(it.texte));
+    if (dit) frag.appendChild(this._ligneJarvis(it, n, dit));
+    frag.appendChild(vis);
+    return frag;
+  };
+
+  /* « Jarvis a dit » : discret et replié ; dedans, la phrase dite et « Texte complet » (la réponse écrite du tour,
+   * nettoyée). L'état ouvert est gardé sur le nœud : le bloc est reconstruit à chaque image pendant l'écriture. */
+  VueFil.prototype._ligneJarvis = function (it, n, dit) {
+    var self = this;
+    var d = el('details', 'jarvis-dit');
+    d.open = !!n._jarvisOuvert;
+    d.appendChild(el('summary', 'jarvis-dit-resume', [el('span', 'jarvis-dit-nom', 'Jarvis a dit')]));
+    var complet = el('div', 'jarvis-complet md');
+    var bouton = BT.bouton('jarvis-complet-bouton', n._completOuvert ? 'Masquer le texte complet' : 'Texte complet', function (ev) {
+      n._completOuvert = !n._completOuvert;
+      ev.currentTarget.textContent = n._completOuvert ? 'Masquer le texte complet' : 'Texte complet';
+      remplir();
+    });
+    function remplir() {
+      complet.hidden = !n._completOuvert;
+      if (n._completOuvert) complet.replaceChildren(BT.rendreMarkdown(self._texteCompletTour(n), {}));
+      else complet.replaceChildren();
+    }
+    d.appendChild(el('div', 'jarvis-dit-corps', [el('p', 'jarvis-dit-texte', dit), bouton, complet]));
+    remplir();
+    d.addEventListener('toggle', function (ev) { ev.stopPropagation(); n._jarvisOuvert = d.open; });
+    return d;
+  };
+
+  /* Toute la réponse écrite du tour (tous ses blocs de texte), sans le bloc <vocal>. */
+  VueFil.prototype._texteCompletTour = function (n) {
+    var carte = n.closest('.tour-claude') || n.parentNode, self = this;
+    var l = carte ? carte.querySelectorAll('.bloc-texte[data-id]') : [n];
+    return Array.prototype.map.call(l, function (b) {
+      var it = self.s.item(b.dataset.id);
+      return it ? BT.nettoyerTexteClaude(it.texte) : '';
+    }).filter(function (t) { return t.trim(); }).join('\n\n');
   };
 
   /* ---------- Écriture progressive de la réponse ----------
@@ -423,9 +474,7 @@
       if (k >= len && fini) { self._finirEcriture(n); self._rendreTexte(it, n); rendu = true; return; }
       if (k !== e.k) {
         e.k = k;
-        var frag = BT.rendreMarkdown(e.src.slice(0, k), { enCours: true });
-        ajouterCurseur(frag);
-        n.replaceChildren(frag);
+        n.replaceChildren(self._fragTexte(it, n, e.src.slice(0, k), true, true, false));
         rendu = true;
       }
       if (k < len || fini) actif = true;

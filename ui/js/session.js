@@ -109,6 +109,8 @@
     this.vocal = { actif: false, etat: 'inactif', enLigne: false, questionId: null, raccourci: '' };
     this._vocalAnnonces = Object.create(null); // id de pont -> annoncé à la coque (pas encore retiré)
     this._vocalEchecs = Object.create(null);   // id de pont -> réponses vocales incomprises d'affilée
+    this._tourVocal = false;   // le tour en cours répond à un message qui portait la consigne vocale (textes « vocal »)
+    this._vocalDit = false;    // le bloc <vocal> de ce tour est déjà parti à la coque (pendant l'écriture)
   }
   Session.prototype = Object.create(BT.Emetteur.prototype);
   Session.prototype.constructor = Session;
@@ -420,7 +422,7 @@
         }
         it = f.blocs[e.index];
         if (dl.type === 'text_delta' && it.genre === 'texte') {
-          it.texte += dl.text || ''; this._maj(it, 'texte');
+          it.texte += dl.text || ''; this._texteVocal(it); this._maj(it, 'texte');
         } else if (dl.type === 'thinking_delta' && it.genre === 'reflexion') {
           it.texte += dl.thinking || ''; this._maj(it, 'texte');
         } else if (dl.type === 'input_json_delta' && it.genre === 'outil') {
@@ -452,6 +454,7 @@
     var it = null;
     if (b.type === 'text') {
       it = BT.etendre(base, { genre: 'texte', texte: b.text || '' });
+      if (!it.parent) { it.vocal = this._tourVocal; this._texteVocal(it); }
     } else if (b.type === 'thinking' || b.type === 'redacted_thinking') {
       it = BT.etendre(base, { genre: 'reflexion', texte: b.thinking || '', masque: b.type === 'redacted_thinking', jetons: null, debut: date || Date.now(), fin: enFlux ? null : (date || Date.now()) });
     } else if (b.type === 'tool_use' || b.type === 'server_tool_use' || b.type === 'mcp_tool_use') {
@@ -532,7 +535,7 @@
         // Bloc déjà affiché par l'historique (⌘R : la ligne arrive aussi en direct) : pas de doublon.
         if (!it && !histo && this._dejaDansHistorique(msgId, genre, t)) continue;
         if (it) {
-          if (genre === 'texte') it.texte = t || it.texte;
+          if (genre === 'texte') { it.texte = t || it.texte; this._texteVocal(it); }
           else if (t) it.texte = t;
           it.enCours = false;
           if (genre === 'reflexion' && !it.fin) it.fin = Date.now();
@@ -593,6 +596,7 @@
       var args = /<command-args>([\s\S]*?)<\/command-args>/.exec(texte);
       var ligne = cmd[1].trim() + (args && args[1].trim() ? ' ' + args[1].trim() : '');
       if (/^\/compact$/.test(cmd[1].trim())) return;   // la compaction a son propre élément (compact_boundary)
+      this._debutTourVocal(false);
       this._ajouter({ genre: 'eliot', texte: ligne, commande: true, historique: true, date: date, uuid: d.uuid || null });
       return;
     }
@@ -605,8 +609,10 @@
     }
     if (/^\s*<(local-command-caveat|system-reminder|bash-input|bash-stdout|bash-stderr|task-notification|user-prompt-submit-hook)/.test(texte)) return;
     var fj = BT.extraireFichiers(texte);
+    var vocal = BT.aConsigneVocale(fj.texte);
     fj.texte = BT.sansConsigneVocale(fj.texte);
-    this._ajouter({ genre: 'eliot', texte: fj.texte, images: images.length ? images : null, fichiers: fj.fichiers, historique: true, date: date, uuid: d.uuid || null });
+    this._debutTourVocal(vocal);
+    this._ajouter({ genre: 'eliot', vocal: vocal, texte: fj.texte, images: images.length ? images : null, fichiers: fj.fichiers, historique: true, date: date, uuid: d.uuid || null });
   };
 
   /* Fichiers joints : leurs chemins partent dans le texte, dans un bloc que Claude lit (outil Read)
@@ -692,10 +698,16 @@
     this.debutTravail = null;
     this._definirActivite('');
     var self = this;
+    var fileVocale = this.items.some(function (it) { return it.genre === 'eliot' && it.enFile && it.vocal; });
     this.items.forEach(function (it) { if (it.genre === 'eliot' && it.enFile) { it.enFile = false; self._maj(it, 'enFile'); } });
     this._calculerEtat();
     // Jarvis dit le résumé du tour (pas après une interruption : c'est Eliot qui l'a demandée).
-    if (this.vocal.actif && !interrompu) this._vocalFin(d, erreur);
+    // Bloc <vocal> déjà dit pendant l'écriture : rien de plus.
+    if (this.vocal.actif && !interrompu && !this._vocalDit) this._vocalFin(d, erreur);
+    this._vocalDit = false;
+    this._cloreTourVocal();
+    // Un message vocal mis en file pendant ce tour garde son tour vocal (sa réponse vient ensuite).
+    if (!fileVocale) this._tourVocal = false;
   };
 
   Session.prototype._limite = function (d) {
@@ -1030,6 +1042,53 @@
     });
   };
 
+  /* ---------- Tours vocaux : réponse dite par Jarvis, affichage graphique seulement ----------
+   * Un texte du fil principal est « vocal » (item.vocal) si le message d'Eliot portait la consigne, ou s'il
+   * contient un bloc <vocal>. La vue (vue-fil.js) n'en montre alors que les éléments visuels. */
+
+  /* Message d'Eliot de l'historique : clôt le tour précédent, ouvre le suivant. */
+  Session.prototype._debutTourVocal = function (vocal) {
+    this._cloreTourVocal();
+    this._tourVocal = !!vocal;
+  };
+
+  /* Texte reçu (flux ou message complet) : bloc <vocal> apparu → tout le tour devient vocal ;
+   * bloc fermé pendant l'écriture → Jarvis le dit tout de suite, une seule fois par tour. */
+  Session.prototype._texteVocal = function (it) {
+    if (it.parent || !BT.aBlocVocal(it.texte)) return;
+    if (!it.vocal) { this._marquerTourVocal(); it.vocal = true; }
+    if (it.historique || this._vocalDit || !this.vocal.actif || !BT.vocal) return;
+    var dit = BT.texteVocalFerme(it.texte);
+    if (!dit) return;
+    this._vocalDit = true;
+    this._envoyer('vocal', { texte: BT.vocal.resumeFin(it.texte) || dit, priorite: 'fin' });
+  };
+
+  /* Textes du tour en cours (depuis le dernier message d'Eliot), du plus récent au plus ancien. */
+  Session.prototype._textesDuTour = function () {
+    var l = [];
+    for (var i = this.items.length - 1; i >= 0; i--) {
+      var it = this.items[i];
+      if (it.genre === 'eliot') break;
+      if (it.genre === 'texte' && !it.parent) l.push(it);
+    }
+    return l;
+  };
+
+  Session.prototype._marquerTourVocal = function () {
+    this._tourVocal = true;
+    var self = this;
+    this._textesDuTour().forEach(function (it) { if (!it.vocal) { it.vocal = true; self._maj(it, 'vocal'); } });
+  };
+
+  /* Fin d'un tour vocal sans aucun bloc <vocal> (Claude a oublié la consigne) : ses textes s'affichent normalement. */
+  Session.prototype._cloreTourVocal = function () {
+    if (!this._tourVocal) return;
+    var l = this._textesDuTour(), self = this;
+    if (l.some(function (it) { return BT.aBlocVocal(it.texte); })) return;
+    l.forEach(function (it) { if (it.vocal) { it.vocal = false; self._maj(it, 'vocal'); } });
+  };
+
   Session.prototype._vocalFin = function (d, erreur) {
     if (!BT.vocal) return;
     var brut = typeof d.result === 'string' && d.result.trim() ? d.result : this._dernierTexte();
@@ -1113,7 +1172,9 @@
     var contenu = images.map(function (i) { return { type: 'image', source: { type: 'base64', media_type: i.type, data: i.donnees } }; });
     var envoi = texte.trim();
     // Mode vocal actif : Claude doit savoir qu'Eliot écoute (bloc <vocal> à la fin de sa réponse).
-    if (this.vocal && this.vocal.actif && envoi && !compact && !/^\/[^\s/]/.test(envoi)) envoi += '\n\n' + BT.CONSIGNE_VOCALE;
+    var vocal = !!(this.vocal && this.vocal.actif && envoi && !compact && !/^\/[^\s/]/.test(envoi));
+    if (vocal) envoi += '\n\n' + BT.CONSIGNE_VOCALE;
+    if (it && it.genre === 'eliot') { it.vocal = vocal; this._tourVocal = vocal; }
     if (fichiers.length) envoi = (envoi ? envoi + '\n\n' : '') + BT.blocFichiers(fichiers);
     if (envoi) contenu.push({ type: 'text', text: envoi });
     var uuid = BT.uuid();
@@ -1528,8 +1589,10 @@
         else if (d.type === 'attachment' && d.attachment && d.attachment.type === 'queued_command') {
           var p = d.attachment.prompt;
           var t = typeof p === 'string' ? p : (Array.isArray(p) ? p.map(function (x) { return x && x.text || ''; }).join('\n') : '');
+          var tv = BT.aConsigneVocale(t);
           t = BT.sansConsigneVocale(BT.extraireFichiers(t).texte);
-          if (t.trim()) { self._ajouter({ genre: 'eliot', texte: t, enFile: false, historique: true, date: d.timestamp ? Date.parse(d.timestamp) : null }); n++; }
+          if (t.trim()) self._debutTourVocal(tv);
+          if (t.trim()) { self._ajouter({ genre: 'eliot', vocal: tv, texte: t, enFile: false, historique: true, date: d.timestamp ? Date.parse(d.timestamp) : null }); n++; }
         } else if (d.type === 'system' && d.subtype === 'compact_boundary') self._systeme(d, true);
       } catch (e) { console.error('[BT] historique', e); }
     });
@@ -1544,6 +1607,8 @@
       } else { o.statut = 'interrompu'; this._maj(o, 'statut'); }
     }
     if (actif) this._definirActivite(this._texteActivite(actif));
+    // Dernier tour vocal de l'historique : sans bloc <vocal>, il s'affiche en texte (sauf s'il continue en direct).
+    if (!this._repriseTour) { this._cloreTourVocal(); this._tourVocal = false; }
     this._flux = Object.create(null);
     this.jetons = { entree: 0, sortie: 0, cacheLu: 0, cacheEcrit: 0, cout: 0 };
     for (var id in usages) this._compterJetons(usages[id]);

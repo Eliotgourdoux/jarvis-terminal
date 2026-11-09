@@ -77,8 +77,16 @@ final class MoteurVocal {
     private var raccourciParler: RaccourciGlobal?
     // Écoute mains libres
     private let ecouteContinue = EcouteContinue()
-    /// Eliot parle (énoncé détecté, pas encore fini) : la file attend.
-    private var parleEliot = false
+    /// Eliot parle (énoncé détecté, pas encore fini) : la file attend. Un énoncé lâché en route (écoute fermée,
+    /// micro rendu) efface son texte en direct.
+    private var parleEliot = false {
+        didSet { if oldValue && !parleEliot && directEcoute { abandonDirect("interrompu") } }
+    }
+    // Transcription en direct (bt.vocalDirect, 09/11/2026) : la page qui montre l'énoncé en cours et son numéro.
+    private weak var pageDirect: Session?
+    private var numeroDirect = 0
+    /// L'énoncé est encore en cours (partiels attendus).
+    private var directEcoute = false
     private var repriseA = Date.distantPast
     private var minuteurReprise: DispatchWorkItem?
     private var prochainEssaiEcoute = Date.distantPast
@@ -427,6 +435,7 @@ final class MoteurVocal {
         debutAppui = Date()
         niveau = 0
         son(.debut)
+        commencerDirect(source: "raccourci") { [weak self] in self?.micro.echantillons() ?? [] }
         let garde = DispatchWorkItem { [weak self] in self?.relache(source: "durée maximale") }
         gardeDuree = garde
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.dureeMaxAppui, execute: garde)
@@ -439,20 +448,23 @@ final class MoteurVocal {
         ecoute = false
         gardeDuree?.cancel(); gardeDuree = nil
         niveau = 0
-        guard let r = micro.arreter() else { maj(); avancer(); return }
+        guard let r = micro.arreter() else { abandonDirect("micro"); maj(); avancer(); return }
         let tenu = Date().timeIntervalSince(debutAppui)
         journal("vocal : relâché (\(source)) après \(String(format: "%.2f", tenu)) s : \(String(format: "%.2f", r.duree)) s d'audio, niveau max \(String(format: "%.2f", r.niveauMax))")
         if r.duree < 0.4 {   // simple tape : la voix est coupée, rien à transcrire
+            abandonDirect("court")
             try? FileManager.default.removeItem(at: r.url)
             cible = nil
             maj(); avancer(); return
         }
         if r.niveauMax < 0.12 {
+            abandonDirect("silence")
             try? FileManager.default.removeItem(at: r.url)
             erreur = "Rien entendu (micro muet ?)."
             cible = nil
             son(.echec); maj(); avancer(); return
         }
+        transcriptionDirecte()
         transcriptions += 1
         maj()
         if let d = PiloteDev.dossier {   // tests : la dernière dictée reste lisible pour le diagnostic
@@ -467,12 +479,14 @@ final class MoteurVocal {
     private func transcrireEtRouter(_ url: URL, duree: Double, mainsLibres ml: Bool) {
         let vocabulaire = RegistreSessions.shared.sessions.filter { !$0.estFermee }.map(\.projet.nom)
         let finParole = Date()
+        let numero = numeroDirect   // l'énoncé montré en direct ; un appui pendant la transcription en ouvre un autre
         Environnement.charger { env in
             Transcription.transcrire(url, dureeAudio: duree, vocabulaire: vocabulaire, env: env) { [weak self] res in
                 try? FileManager.default.removeItem(at: url)
                 guard let self else { return }
                 self.transcriptions -= 1
-                guard self.actif else { self.maj(); return }
+                let direct = numero == self.numeroDirect
+                guard self.actif else { if direct { self.abandonDirect("mode coupé") }; self.maj(); return }
                 switch res {
                 case .failure(let e):
                     self.erreur = "Transcription : \(e)"
@@ -484,9 +498,11 @@ final class MoteurVocal {
                         if !ml { self.erreur = "Rien compris."; self.son(.echec) }   // en mains libres : silence, rien à signaler
                     } else {
                         self.erreur = nil
-                        self.router(t.texte, latence: Date().timeIntervalSince(finParole), dureeWhisper: t.duree)
+                        self.router(t.texte, latence: Date().timeIntervalSince(finParole), dureeWhisper: t.duree, direct: direct)
                     }
                 }
+                // rien livré à la page qui montrait l'énoncé (filtré, erreur, autre session) : son texte s'efface
+                if direct { self.abandonDirect("non livré") }
                 if self.transcriptions == 0 && !self.ecoute && !self.parleEliot { self.cible = nil }
                 self.maj(); self.avancer()
             }
@@ -560,18 +576,21 @@ final class MoteurVocal {
         parleEliot = true
         cible = ciblePresumee()
         enPause = false   // parler relance la file après la dictée
+        commencerDirect(source: "mainsLibres") { [weak self] in self?.ecouteContinue.echantillonsEnonce() ?? [] }
         journal("vocal : parole détectée, cible présumée \(cible?.projet.nom ?? "aucune")")
         maj()
     }
 
     private func finEnonce(_ e: DecoupeurEnonces.Enonce) {
         guard parleEliot else { return }
+        transcriptionDirecte()   // avant parleEliot = false : l'énoncé est fini, pas abandonné
         parleEliot = false
         journal("vocal : fin d'énoncé, \(String(format: "%.2f", e.duree)) s d'audio, \(String(format: "%.2f", e.voix)) s de voix, max \(Int(e.niveauMaxDb)) dB, bruit \(Int(e.bruitDb)) dB\(e.coupe ? ", coupé à la durée maximale" : "")")
         let url = Synthese.shared.dossier.appendingPathComponent("ecoute-" + UUID().uuidString.prefix(8).lowercased() + ".wav")
         do { try DecoupeurEnonces.ecrireWAV(e.echantillons, vers: url) }
         catch {
             journal("vocal : énoncé non écrit — \(error)")
+            abandonDirect("erreur")
             cible = nil; maj(); avancer(); return
         }
         if let d = PiloteDev.dossier {   // tests : le dernier énoncé reste lisible pour le diagnostic
@@ -657,6 +676,57 @@ final class MoteurVocal {
         maj()
     }
 
+    // MARK: - Transcription en direct vers la page (bt.vocalDirect, 09/11/2026)
+    // Pendant un énoncé (mains libres ou ⌥Espace), whisper-server retranscrit en boucle l'audio déjà capté et la
+    // page de la cible présumée affiche les mots en direct. Puis : « transcription » (énoncé fini, whisper-cli
+    // tourne), « fini » (texte retenu, juste avant bt.transcription) ou « annule » (filtré, bruit, autre session).
+
+    private func commencerDirect(source: String, audio: @escaping () -> [Int16]) {
+        if pageDirect != nil || directEcoute { abandonDirect("relance") }
+        guard let p = cible else { return }
+        numeroDirect += 1
+        pageDirect = p
+        directEcoute = true
+        envoyerDirect(["etat": "debut", "source": source])
+        let n = numeroDirect
+        DicteeDirecte.shared.commencer(audio: audio) { [weak self] t in
+            guard let self, self.directEcoute, self.numeroDirect == n else { return }
+            self.envoyerDirect(["etat": "partiel", "texte": t])
+        }
+    }
+
+    private func transcriptionDirecte() {
+        guard directEcoute else { return }
+        directEcoute = false
+        DicteeDirecte.shared.arreter()
+        envoyerDirect(["etat": "transcription"])
+    }
+
+    private func abandonDirect(_ raison: String) {
+        if directEcoute { directEcoute = false; DicteeDirecte.shared.arreter() }
+        guard pageDirect != nil else { return }
+        envoyerDirect(["etat": "annule", "raison": raison])
+        pageDirect = nil
+    }
+
+    /// Texte retenu et livré à `s` : la page qui montrait l'énoncé le fige (sa bulle devient celle du message) ;
+    /// livré à une autre session, elle l'efface.
+    private func finirDirect(livreA s: Session, texte: String, questionId: String?) {
+        guard let p = pageDirect else { return }
+        guard p === s else { abandonDirect("ailleurs"); return }
+        var d: [String: Any] = ["etat": "fini", "texte": texte]
+        if let q = questionId { d["questionId"] = q }
+        envoyerDirect(d)
+        pageDirect = nil
+    }
+
+    private func envoyerDirect(_ d: [String: Any]) {
+        guard let s = pageDirect, !s.estFermee, !s.dansTerminal else { return }
+        var a = d
+        a["id"] = numeroDirect
+        s.vueDev.appelerFonction("vocalDirect", a) { _ in }
+    }
+
     // MARK: - Routage de la dictée
 
     private var sessionsOuvertes: [Session] { RegistreSessions.shared.sessions.filter { !$0.estFermee && !$0.dansTerminal } }
@@ -664,8 +734,17 @@ final class MoteurVocal {
     private func interlocuteurRecent() -> Session? {
         guard let s = interlocuteur, !s.estFermee, !s.dansTerminal,
               Date().timeIntervalSince(dateInterlocuteur) < Self.fraicheurInterlocuteur else { return nil }
-        return s
+        return preferer(s, parmi: sessionsOuvertes.filter { $0.projet.nom == s.projet.nom })
     }
+
+    /// Plusieurs sessions du même projet (les discussions : même dossier, même nom) : si Eliot en a affiché une
+    /// autre depuis le dernier échange vocal, c'est à elle qu'il parle, pas à celle qui a parlé avant (09/11/2026).
+    private func preferer(_ i: Session, parmi l: [Session]) -> Session {
+        guard let p = premierPlan(l), p !== i, p.derniereActivation > dateInterlocuteur else { return i }
+        return p
+    }
+
+    static func estDiscussion(_ s: Session) -> Bool { s.cwd == cheminReel(Entrees.dossierDiscussions) }
 
     /// La fenêtre au premier plan si l'app est devant, sinon la dernière fenêtre de session regardée.
     private func premierPlan(_ l: [Session]) -> Session? {
@@ -677,16 +756,18 @@ final class MoteurVocal {
 
     /// Plusieurs sessions du même projet : celle qui a parlé en dernier, sinon la dernière regardée.
     private func meilleure(_ l: [Session]) -> Session? {
-        if let i = interlocuteur, l.contains(where: { $0 === i }) { return i }
+        if let i = interlocuteur, l.contains(where: { $0 === i }) { return preferer(i, parmi: l) }
         return premierPlan(l)
     }
 
-    private func router(_ texte: String, latence: TimeInterval, dureeWhisper: TimeInterval) {
+    private func router(_ texte: String, latence: TimeInterval, dureeWhisper: TimeInterval, direct: Bool = false) {
         let ouvertes = sessionsOuvertes
         var dest: Session?
         var aEnvoyer = texte
         var raison = ""
-        let candidats = ouvertes.map { [$0.projet.nom, ($0.cwd as NSString).lastPathComponent] }
+        // Les discussions (toutes dans ~/Claude-Discussions) ne se nomment que « Discussion » : le nom du dossier
+        // ferait prendre « Claude, … » pour elles.
+        let candidats = ouvertes.map { Self.estDiscussion($0) ? [$0.projet.nom] : [$0.projet.nom, ($0.cwd as NSString).lastPathComponent] }
         if let c = Routage.nomEnTete(texte, candidats: candidats) {
             let nom = ouvertes[c.index].projet.nom
             dest = meilleure(ouvertes.filter { $0.projet.nom == nom })
@@ -705,8 +786,8 @@ final class MoteurVocal {
                 direSysteme("Aucune session \(nom) n'est ouverte.")
                 return
             }
-            // « Jarvis, … » sans session Jarvis ouverte : simple appel, on le retire
-            if let c = Routage.nomEnTete(texte, candidats: [["Jarvis"]]) { aEnvoyer = Routage.sansEnTete(texte, mots: c.mots) }
+            // « Jarvis, … » sans session Jarvis ouverte, ou « Claude, … » : simple appel, on le retire
+            if let c = Routage.nomEnTete(texte, candidats: [["Jarvis"], ["Claude"]]) { aEnvoyer = Routage.sansEnTete(texte, mots: c.mots) }
             if let s = interlocuteurRecent() { dest = s; raison = "vient de parler" }
             else if let s = premierPlan(ouvertes) { dest = s; raison = "premier plan" }
         }
@@ -723,6 +804,7 @@ final class MoteurVocal {
         derniereDictee = ["texte": aEnvoyer, "projet": s.projet.nom, "emoji": s.projet.emoji, "sessionId": s.sessionId,
                           "date": iso8601.string(from: Date())]
         journal("vocal : « \(extrait(aEnvoyer, 80)) » → \(s.projet.nom) [\(raison)]\(qid.map { " réponse à \($0)" } ?? "") ; relâché → livré \(String(format: "%.2f", latence)) s (whisper \(String(format: "%.2f", dureeWhisper)) s)")
+        if direct { finirDirect(livreA: s, texte: aEnvoyer, questionId: qid) }   // juste avant bt.transcription
         s.livrerTranscription(aEnvoyer, questionId: qid)
         son(.fin)
     }
@@ -765,6 +847,7 @@ final class MoteurVocal {
 
     private func maj() {
         ajusterEcoute()
+        DicteeDirecte.shared.garder(actif && mainsLibres)   // partiels rapides dès le premier énoncé
         for s in RegistreSessions.shared.sessions where !s.estFermee { s.envoyerVocalEtat(etatPage(pour: s)) }
         PanneauJarvis.shared.maj(etatPanneau())
         NotificationCenter.default.post(name: Self.changement, object: self)
