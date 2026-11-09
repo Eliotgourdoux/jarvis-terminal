@@ -18,8 +18,33 @@
     return String(t == null ? '' : t).replace(RE_OSC, '').replace(RE_ANSI, '').replace(/\u001b/g, '');
   };
 
+  /* Mode vocal : Claude termine sa réponse par <vocal>…</vocal> (ce qui sera dit à voix haute).
+   * Le bloc n'est jamais affiché ; pendant l'écriture, une balise ouverte masque la suite. */
+  var RE_VOCAL = /<vocal>([\s\S]*?)(?:<\/vocal>|$)/i;
+  var RE_VOCAL_TOUS = /\n*[ \t]*<vocal>[\s\S]*?(?:<\/vocal>[ \t]*|$)/gi;
+  var RE_VOCAL_DEBUT = /\n*[ \t]*<v(?:o(?:c(?:a(?:l)?)?)?)?$/i; // balise en cours d'écriture
+  BT.texteVocal = function (t) {
+    var m = RE_VOCAL.exec(String(t == null ? '' : t));
+    return m ? m[1].trim() : '';
+  };
+  BT.sansVocal = function (t) {
+    return String(t == null ? '' : t).replace(RE_VOCAL_TOUS, '').replace(RE_VOCAL_DEBUT, '');
+  };
+
+  /* Consigne ajoutée aux messages envoyés quand le mode vocal est actif (invisible dans le fil). */
+  var RE_CONSIGNE_VOCALE = /\n*<mode-vocal>[\s\S]*?<\/mode-vocal>\s*/g;
+  BT.CONSIGNE_VOCALE = '<mode-vocal>Mode vocal Jarvis actif : Eliot t’écoute et ne regarde pas l’écran. '
+    + 'Fais le travail normalement et garde ta réponse écrite. Juste avant la ligne ✅, ajoute un bloc <vocal>…</vocal> : '
+    + 'ce que tu lui dirais à l’oral, comme un collègue au téléphone, en une à trois phrases courtes. '
+    + 'Ces phrases doivent se comprendre sans l’écran ni le reste du fil : rappelle de quoi il s’agit, '
+    + 'dis le résultat ou ce qui a changé, et pose clairement la question s’il doit trancher quelque chose. '
+    + 'Tutoiement, français parlé naturel, sans markdown, sans chemin de fichier, sans code, sans emoji ni liste.</mode-vocal>';
+  BT.sansConsigneVocale = function (t) {
+    return String(t == null ? '' : t).replace(RE_CONSIGNE_VOCALE, '\n').trim();
+  };
+
   BT.nettoyerTexteClaude = function (t) {
-    var s = BT.sansAnsi(t);
+    var s = BT.sansVocal(BT.sansAnsi(t));
     s = s.replace(RE_BANDEAU, '');
     s = s.replace(RE_FILET_RESUME, '\n\n');
     return s.replace(/^\s*\n/, '').replace(/\s+$/, '');

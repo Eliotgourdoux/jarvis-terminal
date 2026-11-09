@@ -605,6 +605,7 @@
     }
     if (/^\s*<(local-command-caveat|system-reminder|bash-input|bash-stdout|bash-stderr|task-notification|user-prompt-submit-hook)/.test(texte)) return;
     var fj = BT.extraireFichiers(texte);
+    fj.texte = BT.sansConsigneVocale(fj.texte);
     this._ajouter({ genre: 'eliot', texte: fj.texte, images: images.length ? images : null, fichiers: fj.fichiers, historique: true, date: date, uuid: d.uuid || null });
   };
 
@@ -1111,6 +1112,8 @@
     });
     var contenu = images.map(function (i) { return { type: 'image', source: { type: 'base64', media_type: i.type, data: i.donnees } }; });
     var envoi = texte.trim();
+    // Mode vocal actif : Claude doit savoir qu'Eliot écoute (bloc <vocal> à la fin de sa réponse).
+    if (this.vocal && this.vocal.actif && envoi && !compact && !/^\/[^\s/]/.test(envoi)) envoi += '\n\n' + BT.CONSIGNE_VOCALE;
     if (fichiers.length) envoi = (envoi ? envoi + '\n\n' : '') + BT.blocFichiers(fichiers);
     if (envoi) contenu.push({ type: 'text', text: envoi });
     var uuid = BT.uuid();
@@ -1525,6 +1528,7 @@
         else if (d.type === 'attachment' && d.attachment && d.attachment.type === 'queued_command') {
           var p = d.attachment.prompt;
           var t = typeof p === 'string' ? p : (Array.isArray(p) ? p.map(function (x) { return x && x.text || ''; }).join('\n') : '');
+          t = BT.sansConsigneVocale(BT.extraireFichiers(t).texte);
           if (t.trim()) { self._ajouter({ genre: 'eliot', texte: t, enFile: false, historique: true, date: d.timestamp ? Date.parse(d.timestamp) : null }); n++; }
         } else if (d.type === 'system' && d.subtype === 'compact_boundary') self._systeme(d, true);
       } catch (e) { console.error('[BT] historique', e); }
