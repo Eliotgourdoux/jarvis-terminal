@@ -3,7 +3,7 @@
  * le code en ligne, les liens et images markdown (data-media posé par markdown.js) et les pièces jointes.
  * Lecture : par le schéma btmedia:// de la coque (app/Sources/Medias.swift), seul moyen de lire un fichier
  * hors de ui/. Jamais de lecture automatique, jamais de boucle ; les GIF restent figés tant qu'on ne clique pas.
- * Ce que WebKit ne sait pas lire (ogg, opus…) devient un bouton « Ouvrir » (app par défaut du Mac). */
+ * Les vocaux ogg / opus sont convertis par l'app et se lisent ici ; ce qui reste illisible devient un bouton « Ouvrir ». */
 (function () {
   'use strict';
   var BT = window.BT = window.BT || {};
@@ -130,6 +130,7 @@
   }
 
   function lisible(c) {
+    if (/^(ogg|oga|opus)$/.test(extension(c))) return true;   // l'app les convertit en m4a (Medias.swift, 10/11/2026)
     var types = TYPES[extension(c)];
     if (!types) return true;
     var m = document.createElement(genre(c) === 'video' ? 'video' : 'audio');
