@@ -30,6 +30,9 @@ enum ClaudeArgs {
     les CDN en https marchent aussi si le Mac est en ligne. L'aperçu est isolé : aucun accès aux fichiers locaux ni à l'app. \
     Le fond est sombre (#0C0D10) et le texte clair : choisis des couleurs lisibles dessus (ex. Chart.defaults.color = '#ECECF1'). \
     Mets tout dans un seul bloc autonome, sans fichier externe local. N'en abuse pas : un visuel seulement quand il aide à comprendre. \
+    Pour montrer des images, vidéos ou sons du Mac (rendus, captures, vocaux), écris simplement leur chemin absolu dans le texte, \
+    un par ligne et hors bloc de code : l'app affiche elle-même un lecteur (les vidéos d'un même message forment un mur, \
+    les photos d'un même message une galerie avec plein écran : cite-les toutes dans le même message ; les vocaux ogg et opus sont lus aussi). Jamais d'aperçu HTML ni de serveur http local pour ça : l'aperçu ne peut pas les lire. \
     Au-dessus de la saisie, l'utilisateur voit deux listes numérotées : « Plan de Claude » (tes étapes TodoWrite, numérotées dans l'ordre) \
     et « À toi » (la to-do du projet, numérotée dans l'ordre exact de `todo list <projet>`). \
     Quand il parle de « la 3 » ou « la tâche 3 », lance `todo list <projet>` et prends la ligne 3, ou l'étape 3 de ton plan si le contexte l'indique.
