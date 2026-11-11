@@ -101,6 +101,19 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 
 .pied { flex: none; padding: 10px 16px 12px; font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--bord); }
 
+/* Limites de l'abonnement (limites.js, 11/11/2026) : deux barres fines, couleur continue vert → rouge. */
+.limites { display: flex; flex-direction: column; gap: 9px; padding: 11px 16px 13px; }
+.limites-vide { margin: 0; line-height: 1.4; }
+.limite[hidden], .limites-vide[hidden], .limite-temps[hidden] { display: none; }
+.limite { cursor: default; }
+.limite-tete { display: flex; align-items: baseline; gap: 6px; margin-bottom: 5px; }
+.limite-nom { color: var(--dim); font-weight: 600; font-size: 11.5px; }
+.limite-pct { font-weight: 700; font-size: 12.5px; font-variant-numeric: tabular-nums; transition: color .6s ease; }
+.limite-remise { margin-left: auto; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.limite-barre { position: relative; height: 6px; border-radius: 3px; background: var(--surface-3); overflow: visible; }
+.limite-rempli { height: 100%; width: 0; border-radius: 3px; transition: width .6s ease, background .6s ease; }
+.limite-temps { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; border-radius: 1px; background: rgba(236, 236, 241, .75); }
+
 /* Fermeture avec bilan en cours (08/11/2026) : la session descend en bas de la liste, estompée, avec un
    petit spinner rouge, le temps que Claude fasse sa fin de session. Seule animation en boucle de la barre, voulue par Eliot. */
 .item.e-fermeture { opacity: .62; cursor: default; animation: descendre .28s ease-out; }

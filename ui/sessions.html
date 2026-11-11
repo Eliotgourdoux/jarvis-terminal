@@ -21,12 +21,37 @@
   </button>
 </header>
 
+<!-- Nouvelle session : sur ce Mac ou sur le Victus (12/11/2026, victus/CONTRAT-VICTUS.md). -->
+<div id="menu-machine" class="menu-machine" role="menu" hidden>
+  <button type="button" role="menuitem" data-machine="mac">Sur ce Mac<span class="menu-touche">⌘N</span></button>
+  <button type="button" role="menuitem" data-machine="victus">Sur le Victus<span class="encadre-machine">Ultron</span></button>
+</div>
+
+<section id="panneau-victus" class="panneau-victus" aria-label="Nouvelle session sur le Victus" hidden>
+  <div class="panneau-tete">
+    <span class="panneau-titre">Nouvelle · Victus</span>
+    <button type="button" id="panneau-fermer" class="fermer-panneau" aria-label="Annuler">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+    </button>
+  </div>
+  <form id="panneau-saisie" class="panneau-saisie" autocomplete="off">
+    <input id="panneau-chemin" type="text" spellcheck="false" placeholder="~/projets/…" aria-label="Dossier sur le Victus">
+    <button type="submit" class="panneau-ouvrir">Ouvrir</button>
+  </form>
+  <p id="panneau-message" class="panneau-message" hidden></p>
+  <div id="panneau-dossiers" class="panneau-dossiers" role="listbox" aria-label="Dossiers récents du Victus"></div>
+</section>
+
 <nav id="liste" class="liste" aria-label="Sessions ouvertes"></nav>
 
 <p id="vide" class="vide" hidden>Aucune session ouverte.<br><button type="button" id="nouvelle-vide" class="lien">Ouvrir un projet</button></p>
 
-<footer class="pied">⌘1 à ⌘9 · ⌃Tab pour passer d’une session à l’autre</footer>
+<!-- Limites de l'abonnement (11/11/2026, demande d'Eliot) : toujours visibles, à la place de l'aide des raccourcis. -->
+<footer class="pied limites" id="limites" title="⌘1 à ⌘9 · ⌃Tab pour passer d’une session à l’autre">
+  <p class="limites-vide" id="limites-vide">Limites connues après la première réponse de Claude.</p>
+</footer>
 
 <script src="js/sessions.js"></script>
+<script src="js/limites.js"></script>
 </body>
 </html>

@@ -113,7 +113,8 @@
       poser(this.contexte, 'Contexte —', 'Contexte utilisé : connu après la première réponse de Claude.', 0);
     }
 
-    var q = etat.quota || {}, q5 = q.cinqH, q7 = q.semaine;
+    // 5 h et semaine : déplacés en bas de la barre des sessions (limites.js, demande d'Eliot du 11/11/2026).
+    var q5 = null, q7 = null;
     poser(this.cinqH, q5 ? '5 h ' + entierPct(q5.pct) : '',
       q5 ? 'Quota de l’abonnement sur 5 heures : ' + entierPct(q5.pct) + '\nRemise à zéro ' + remise(q5.resetsAt) : '', q5 ? q5.pct : 0);
     poser(this.semaine, q7 ? (q5 ? 'sem. ' : 'Semaine ') + entierPct(q7.pct) : '',
