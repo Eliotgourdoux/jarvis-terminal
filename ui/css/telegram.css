@@ -20,7 +20,8 @@ body.tg { display: flex; flex-direction: column; }
 .tg-defile::-webkit-scrollbar { width: 10px; }
 .tg-defile::-webkit-scrollbar-thumb { background: rgba(201,164,92,.3); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 .tg-colonne { max-width: var(--largeur); margin: 0 auto; padding: 0 28px; box-sizing: border-box; }
-.tg-defile .tg-colonne { padding-top: 18px; padding-bottom: 28px; min-height: 100%; background: var(--lecture); border-left: 1px solid var(--bord); border-right: 1px solid var(--bord); box-shadow: 0 0 48px rgba(0,0,0,.55); }
+.tg-defile { background: linear-gradient(90deg, rgba(8,8,10,0), rgba(8,8,10,.5) 24%, rgba(8,8,10,.6) 50%, rgba(8,8,10,.5) 76%, rgba(8,8,10,0)); }
+.tg-defile .tg-colonne { padding-top: 18px; padding-bottom: 28px; min-height: 100%; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
 
 .tg-plus {
   display: block; margin: 0 auto 18px; padding: 6px 14px; border-radius: 8px;
