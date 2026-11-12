@@ -30,7 +30,7 @@
         '<script src="mermaid.js"><\/script><script>' +
         'mermaid.initialize({startOnLoad:false,theme:"dark",securityLevel:"strict",fontFamily:"-apple-system,system-ui,sans-serif"});' +
         'mermaid.render("bt-m",' + src + ').then(function(r){document.getElementById("d").innerHTML=r.svg})' +
-        '.catch(function(e){var d=document.getElementById("d");d.style.color="#FF8A8A";d.textContent="Diagramme invalide : "+((e&&e.message)||e)});' +
+        '.catch(function(e){var d=document.getElementById("d");d.style.color="#F0A79E";d.textContent="Diagramme invalide : "+((e&&e.message)||e)});' +
         '<\/script>';
     }
     if (genre === 'svg') return '<style>body{display:flex;justify-content:center}svg{max-width:100%;height:auto}</style>' + code;
