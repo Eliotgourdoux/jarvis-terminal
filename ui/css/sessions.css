@@ -135,7 +135,8 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 
 /* Fermeture avec bilan en cours (08/11/2026) : la session descend en bas de la liste, estompée, avec un
    petit spinner rouge, le temps que Claude fasse sa fin de session. Seule animation en boucle de la barre, voulue par Eliot. */
-.item.e-fermeture { opacity: .62; cursor: default; animation: descendre .28s ease-out; }
+.item.e-fermeture { opacity: .62; cursor: default; }
+.item.e-fermeture.arrive { animation: descendre .28s ease-out; }
 .item.e-fermeture:hover { background: transparent; }
 .e-fermeture .etat-texte { color: var(--rouge); }
 .spinner {
@@ -150,3 +151,80 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 /* Conversation Telegram avec Jarvis (08/11/2026) : épinglée en haut, séparée des sessions par un filet. */
 .canal { flex: none; font-size: 11px; color: var(--faint); }
 .separateur-jarvis { height: 1px; margin: 6px 4px 6px; background: linear-gradient(90deg, transparent, var(--bord-fort), transparent); flex: none; }
+
+/* Sessions du Victus (12/11/2026, victus/CONTRAT-VICTUS.md) : petit encadré « Ultron », teinte froide sobre
+   (bleu acier), dans la charte marbre. Victus injoignable : sessions grisées, pas cliquables pour écrire. */
+:root { --ultron: #9DB4C8; --ultron-bord: rgba(157, 180, 200, .45); --ultron-fond: rgba(20, 28, 36, .7); }
+.encadre-machine {
+  flex: none; padding: 0 5px; border: 1px solid var(--ultron-bord); border-radius: 4px; background: var(--ultron-fond);
+  color: var(--ultron); font: 600 9.5px/15px var(--police); letter-spacing: .08em; text-transform: uppercase; text-shadow: none;
+}
+.item.indispo { opacity: .5; }
+.item.indispo .etat-texte { color: var(--faint); font-weight: 400; }
+.item.indispo .point { background: transparent; border: 1px solid var(--faint); box-sizing: border-box; }
+.item.victus.non-ouverte .projet { font-weight: 500; }
+.separateur-machine {
+  flex: none; display: flex; align-items: center; gap: 8px; margin: 8px 4px 4px; color: var(--faint);
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+}
+.separateur-machine::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--ultron-bord), transparent); }
+.separateur-machine .lien-etat { letter-spacing: 0; text-transform: none; font-size: 11px; }
+
+/* Choix de la machine (menu sous le bouton +) */
+.menu-machine {
+  position: absolute; z-index: 5; top: calc(var(--titre-h) + 40px); right: 10px; min-width: 176px;
+  display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--bord-fort); border-radius: 8px;
+  background: rgba(14, 12, 15, .97); box-shadow: 0 12px 30px rgba(0,0,0,.6);
+}
+.menu-machine[hidden], .panneau-victus[hidden], .panneau-message[hidden] { display: none; }
+.menu-machine button {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--texte); font: 13px var(--police); text-align: left; cursor: pointer;
+}
+.menu-machine button:hover, .menu-machine button:focus-visible { background: var(--surface-3); outline: none; }
+.menu-machine button:disabled { color: var(--faint); cursor: default; background: transparent; }
+.menu-machine button > :last-child { margin-left: auto; }
+.menu-touche { color: var(--faint); font-size: 11.5px; }
+
+/* Panneau « Nouvelle session sur le Victus » : dossiers récents du Victus + saisie d'un chemin. */
+.panneau-victus {
+  flex: none; margin: 0 8px 8px; padding: 10px; border: 1px solid var(--ultron-bord); border-radius: 8px;
+  background: rgba(12, 13, 16, .94); display: flex; flex-direction: column; gap: 8px; max-height: 58vh; min-height: 0;
+}
+.panneau-tete { display: flex; align-items: center; gap: 6px; }
+.panneau-titre { flex: 1; color: var(--ultron); font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.fermer-panneau { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer; }
+.fermer-panneau:hover { color: var(--texte); background: var(--surface-3); }
+.fermer-panneau svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+.panneau-saisie { display: flex; gap: 6px; }
+.panneau-saisie input {
+  flex: 1; min-width: 0; padding: 5px 7px; border: 1px solid var(--bord-fort); border-radius: 6px; background: var(--fond);
+  color: var(--texte); font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; -webkit-user-select: text; user-select: text;
+}
+.panneau-saisie input:focus { outline: none; border-color: var(--ultron); }
+.panneau-ouvrir {
+  flex: none; padding: 0 10px; border: 1px solid var(--ultron-bord); border-radius: 6px; background: var(--ultron-fond);
+  color: var(--ultron); font: 600 12px var(--police); cursor: pointer;
+}
+.panneau-ouvrir:hover { color: var(--texte-fort); border-color: var(--ultron); }
+.panneau-ouvrir:disabled { opacity: .5; cursor: default; }
+.panneau-message { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.4; }
+.panneau-message.erreur { color: var(--rouge); }
+.panneau-dossiers { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 0; }
+.panneau-dossiers::-webkit-scrollbar { width: 6px; }
+.panneau-dossiers::-webkit-scrollbar-thumb { background: rgba(157,180,200,.3); border-radius: 3px; }
+.dossier-victus {
+  display: block; width: 100%; padding: 5px 7px; border: 1px solid transparent; border-radius: 5px; background: transparent;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.dossier-victus:hover, .dossier-victus:focus-visible { background: var(--surface-2); border-color: var(--ultron-bord); outline: none; }
+.dossier-nom { display: block; font-size: 13px; color: var(--texte); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dossier-chemin { display: block; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+
+/* Erreur d'ouverture quand le panneau est fermé */
+.alerte-barre { flex: none; margin: 0 8px 6px; padding: 7px 9px; border: 1px solid rgba(224,122,111,.4); border-radius: 7px; background: rgba(40,16,14,.85); color: var(--rouge); font-size: 12px; cursor: pointer; }
+.alerte-barre[hidden] { display: none; }
+
+/* Ultron Terminal (app GTK du Victus) : barre.config({app:'ultron-terminal'}) — même barre, accent bleu acier. */
+html.app-ultron .tete-titre { color: var(--ultron); }
+html.app-ultron #discussion { display: none; }

@@ -3,7 +3,13 @@
  *                dansTerminal, maj, actif, nonLu}])
  *                + en bas, les fermetures avec bilan en cours : {id, projet, emoji, fermeture: true, maj}
  *                2e argument : la conversation Telegram avec Jarvis {apercu, maj, actif, nonLu, occupe} ou null
- * Page → Swift : {type:'pret'} {type:'choisir', id} {type:'fermer', id} {type:'nouvelle'} {type:'jarvis'} */
+ *                3e argument (12/11/2026) : état des machines {victus: {configure, etat: 'connecte'|'connexion'|'injoignable'|'inactif', erreur}}
+ *                Une session du Victus porte en plus {machine:'victus', ouverte, indisponible} : encadré « Ultron ».
+ * Swift → page : barreSessions.dossiers({liste:[{cwd, nom, maj}], home, erreur?}), .erreur(texte), .ouverte(cwd)
+ *                barreSessions.config({app, machine, choixMachine}) : app GTK du Victus (« Ultron Terminal »),
+ *                appelée par victus/linux/app avec {app:'ultron-terminal', machine:'victus', choixMachine:false}.
+ * Page → Swift : {type:'pret'} {type:'choisir', id} {type:'fermer', id} {type:'nouvelle'} {type:'jarvis'}
+ *                {type:'dossiers'} {type:'nouvelle', machine:'victus', cwd} (cwd absolu ou « ~/… ») */
 (function () {
   'use strict';
 
@@ -14,6 +20,10 @@
   var vide = document.getElementById('vide');
   var donnees = [];
   var jarvis = null;
+  var machines = null;
+  // Barre du Mac par défaut ; l'app du Victus appelle barreSessions.config({app:'ultron-terminal', machine:'victus', choixMachine:false}).
+  var conf = { app: 'jarvis-terminal', machine: 'mac', choixMachine: true };
+  function surVictus() { return conf.machine === 'victus'; }
 
   function el(tag, cls, texte) {
     var e = document.createElement(tag);
@@ -37,6 +47,7 @@
 
   function etatDe(d) {
     if (d.fermeture) return { cle: 'fermeture', texte: 'Fermeture · bilan en cours' };
+    if (d.indisponible) return { cle: 'indispo', texte: 'Victus injoignable' };
     if (d.dansTerminal) return { cle: 'termine', texte: 'Dans le Terminal' };
     if (d.etat === 'attend') return { cle: 'attend', texte: 'Claude t’attend' };
     if (d.etat === 'travaille') return { cle: 'travaille', texte: 'Travaille…' };
@@ -86,15 +97,41 @@
     liste.appendChild(el('div', 'separateur-jarvis'));
   }
 
+  // Fermetures déjà affichées : l'animation d'entrée ne se joue qu'une fois (la liste est redessinée à chaque mise à jour).
+  var fermeturesVues = Object.create(null);
+
+  function etatLien() {
+    var v = machines && machines.victus;
+    if (!v || !v.configure) return '';
+    if (v.etat === 'connexion') return 'connexion…';
+    if (v.etat === 'injoignable') return 'injoignable';
+    return '';
+  }
+
   function rendre() {
     liste.textContent = '';
     if (jarvis) rendreJarvis();
     vide.hidden = donnees.length > 0;
+    var separateurMis = false;
     var doublons = {};
     donnees.forEach(function (d) { doublons[d.projet] = (doublons[d.projet] || 0) + 1; });
     donnees.forEach(function (d) {
       var e = etatDe(d);
+      var victus = d.machine === 'victus' && !surVictus();
+      // Victus injoignable : un filet « Victus · injoignable » avant ses sessions (grisées)
+      if (victus && !separateurMis && !d.fermeture) {
+        separateurMis = true;
+        var et0 = etatLien();
+        if (et0) {
+          var sep = el('div', 'separateur-machine', 'Victus');
+          sep.appendChild(el('span', 'lien-etat', '· ' + et0));
+          liste.appendChild(sep);
+        }
+      }
       var item = el('div', 'item e-' + e.cle);
+      if (d.machine === 'victus') item.classList.add('victus');
+      if (d.machine === 'victus' && d.ouverte === false) item.classList.add('non-ouverte');
+      if (d.indisponible) item.classList.add('indispo');
       item.setAttribute('role', 'button');
       item.tabIndex = 0;
       item.dataset.id = d.id;
@@ -106,9 +143,15 @@
       var nom = el('span', 'projet', d.projet || 'Session');
       if (doublons[d.projet] > 1 && d.cwd) nom.appendChild(el('span', 'dossier', ' · ' + d.cwd.split('/').filter(Boolean).pop()));
       l1.appendChild(nom);
+      if (victus) {
+        var tag = el('span', 'encadre-machine', 'Ultron');
+        tag.title = 'Session du Victus';
+        l1.appendChild(tag);
+      }
       if (d.fermeture) {
         item.removeAttribute('role'); item.tabIndex = -1;
         item.setAttribute('aria-label', (d.projet || 'Session') + ' : fermeture en cours');
+        if (!fermeturesVues[d.id]) { fermeturesVues[d.id] = 1; item.classList.add('arrive'); }
         item.appendChild(l1);
         var ef = el('div', 'etat');
         ef.appendChild(el('span', 'spinner'));
@@ -118,10 +161,10 @@
         liste.appendChild(item);
         return;
       }
-      if (d.numero <= 9) l1.appendChild(el('span', 'raccourci', '⌘' + d.numero));
+      if (d.numero <= 9) l1.appendChild(el('span', 'raccourci', (surVictus() ? 'Ctrl+' : '⌘') + d.numero));
       var f = el('button', 'fermer');
       f.type = 'button';
-      f.title = 'Fermer la session';
+      f.title = d.machine === 'victus' && !surVictus() ? 'Arrêter la session sur le Victus' : 'Fermer la session';
       f.setAttribute('aria-label', 'Fermer la session ' + (d.projet || ''));
       f.appendChild(croix());
       f.addEventListener('click', function (ev) { ev.stopPropagation(); envoyer({ type: 'fermer', id: d.id }); });
@@ -147,8 +190,146 @@
     });
   }
 
+  /* ---------- Nouvelle session : Mac ou Victus ---------- */
+
+  var menu = document.getElementById('menu-machine');
+  var panneau = document.getElementById('panneau-victus');
+  var chemin = document.getElementById('panneau-chemin');
+  var message = document.getElementById('panneau-message');
+  var dossiersEl = document.getElementById('panneau-dossiers');
+  var boutonOuvrir = panneau.querySelector('.panneau-ouvrir');
+  var home = '/home/eliotgrx';
+  var alerte = el('div', 'alerte-barre');
+  alerte.hidden = true;
+  alerte.setAttribute('role', 'alert');
+  alerte.addEventListener('click', function () { alerte.hidden = true; });
+  liste.parentNode.insertBefore(alerte, liste);
+  var minuteurAlerte = 0;
+
+  function victusDispo() {
+    if (surVictus()) return true;
+    var v = machines && machines.victus;
+    return !!(v && v.etat === 'connecte');
+  }
+
+  function montrerMessage(t, erreur) {
+    message.hidden = !t;
+    message.textContent = t || '';
+    message.classList.toggle('erreur', !!erreur);
+  }
+
+  function fermerMenu() { menu.hidden = true; }
+
+  function ouvrirMenu() {
+    var bv = menu.querySelector('[data-machine="victus"]');
+    bv.disabled = !victusDispo();
+    var et = etatLien();
+    bv.title = bv.disabled ? 'Victus ' + (et || 'injoignable') : '';
+    menu.hidden = false;
+    (bv.disabled ? menu.querySelector('[data-machine="mac"]') : bv).focus();
+  }
+
+  function nouvelle() {
+    if (surVictus()) { ouvrirPanneau(); return; }
+    var v = machines && machines.victus;
+    if (!v || !v.configure || conf.choixMachine === false) { envoyer({ type: 'nouvelle' }); return; }
+    if (menu.hidden) ouvrirMenu(); else fermerMenu();
+  }
+
+  function ouvrirPanneau() {
+    fermerMenu();
+    alerte.hidden = true;
+    panneau.hidden = false;
+    chemin.value = '';
+    boutonOuvrir.disabled = false;
+    dossiersEl.textContent = '';
+    montrerMessage('Dossiers récents du Victus…', false);
+    envoyer({ type: 'dossiers' });
+    chemin.focus();
+  }
+
+  function fermerPanneau() { panneau.hidden = true; montrerMessage('', false); }
+
+  function lancer(cwd) {
+    cwd = String(cwd || '').trim();
+    if (!cwd) { chemin.focus(); return; }
+    if (cwd.charAt(0) !== '/' && cwd.charAt(0) !== '~') cwd = home.replace(/\/$/, '') + '/' + cwd;
+    boutonOuvrir.disabled = true;
+    montrerMessage('Ouverture sur le Victus…', false);
+    envoyer({ type: 'nouvelle', machine: 'victus', cwd: cwd });
+  }
+
+  function rendreDossiers(r) {
+    r = r || {};
+    if (typeof r.home === 'string' && r.home.charAt(0) === '/') home = r.home;
+    chemin.placeholder = '~/projets/…';
+    var l = Array.isArray(r.liste) ? r.liste : [];
+    dossiersEl.textContent = '';
+    if (r.erreur) montrerMessage(String(r.erreur), true);
+    else montrerMessage(l.length ? '' : 'Aucun dossier récent : tapez un chemin.', false);
+    l.forEach(function (d) {
+      if (!d || typeof d.cwd !== 'string') return;
+      var b = el('button', 'dossier-victus');
+      b.type = 'button';
+      b.setAttribute('role', 'option');
+      b.appendChild(el('span', 'dossier-nom', d.nom || d.cwd.split('/').filter(Boolean).pop() || d.cwd));
+      var court = d.cwd.indexOf(home + '/') === 0 ? '~' + d.cwd.slice(home.length) : d.cwd;
+      b.appendChild(el('span', 'dossier-chemin', '\u200E' + court + (d.maj ? ' · ' + temps(Number(d.maj)) : '')));
+      b.title = d.cwd;
+      b.addEventListener('click', function () { lancer(d.cwd); });
+      dossiersEl.appendChild(b);
+    });
+  }
+
+  function montrerErreur(t) {
+    t = String(t || 'Erreur');
+    if (!panneau.hidden) { boutonOuvrir.disabled = false; montrerMessage(t, true); return; }
+    alerte.textContent = t;
+    alerte.hidden = false;
+    clearTimeout(minuteurAlerte);
+    minuteurAlerte = setTimeout(function () { alerte.hidden = true; }, 8000);
+  }
+
+  menu.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button[data-machine]');
+    if (!b || b.disabled) return;
+    fermerMenu();
+    if (b.dataset.machine === 'victus') ouvrirPanneau(); else envoyer({ type: 'nouvelle' });
+  });
+  document.getElementById('panneau-fermer').addEventListener('click', fermerPanneau);
+  document.getElementById('panneau-saisie').addEventListener('submit', function (ev) { ev.preventDefault(); lancer(chemin.value); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (!menu.hidden) { fermerMenu(); ev.preventDefault(); }
+    else if (!panneau.hidden) { fermerPanneau(); ev.preventDefault(); }
+  });
+  document.addEventListener('mousedown', function (ev) {
+    if (!menu.hidden && !menu.contains(ev.target) && !ev.target.closest('#nouvelle, #nouvelle-vide')) fermerMenu();
+  });
+
   window.barreSessions = {
-    maj: function (l, j) { donnees = Array.isArray(l) ? l : []; jarvis = j && typeof j === 'object' ? j : null; rendre(); }
+    maj: function (l, j, m) {
+      donnees = Array.isArray(l) ? l : [];
+      jarvis = j && typeof j === 'object' ? j : null;
+      if (m && typeof m === 'object') machines = m;
+      rendre();
+    },
+    dossiers: rendreDossiers,
+    erreur: montrerErreur,
+    ouverte: function () { fermerPanneau(); },
+    config: function (c) {
+      c = c || {};
+      if (typeof c.app === 'string') conf.app = c.app;
+      if (typeof c.machine === 'string') conf.machine = c.machine;
+      if (typeof c.choixMachine === 'boolean') conf.choixMachine = c.choixMachine;
+      var ultron = conf.app === 'ultron-terminal';
+      document.documentElement.classList.toggle('app-ultron', ultron);
+      document.querySelector('.tete-titre').textContent = ultron ? 'Ultron Terminal' : 'Sessions';
+      document.title = ultron ? 'Ultron Terminal' : 'Sessions';
+      var n = document.getElementById('nouvelle');
+      n.title = surVictus() ? 'Nouvelle session sur le Victus (Ctrl+N)' : 'Nouvelle session (⌘N)';
+      rendre();
+    }
   };
 
   // les durées « il y a » se rafraîchissent sans tout redessiner
@@ -160,7 +341,6 @@
     document.querySelectorAll('.temps[data-debut]').forEach(function (t) { t.textContent = duree(Number(t.dataset.debut)); });
   }, 1000);
 
-  function nouvelle() { envoyer({ type: 'nouvelle' }); }
   document.getElementById('nouvelle').addEventListener('click', nouvelle);
   document.getElementById('discussion').addEventListener('click', function () { envoyer({ type: 'discussion' }); });
   document.getElementById('nouvelle-vide').addEventListener('click', nouvelle);
@@ -175,8 +355,23 @@
       { id: 'c', numero: 3, emoji: '🏓', projet: 'Ping Pong Edit', etat: 'pret', nonLu: true, resume: 'Le rendu des sous-titres est corrigé, trois fichiers modifiés.', maj: m - 600000 },
       { id: 'd', numero: 4, emoji: '🛰️', projet: 'Cockpit', etat: 'pret', resume: 'Les sessions en attente s’allument en orange.', maj: m - 7200000 },
       { id: 'e', numero: 5, emoji: '🤖', projet: 'Jarvis-Ultron-Telegram', etat: 'pret', dansTerminal: true, resume: '', maj: m - 90000000 },
+      { id: 'v1', numero: 6, emoji: '🧪', projet: 'Labo Victus', machine: 'victus', ouverte: true, etat: 'travaille', resume: 'Compile le module de rendu sur le GPU du Victus.', maj: m - 40000 },
+      { id: 'v2', numero: 7, emoji: '📦', projet: 'Scraper', machine: 'victus', ouverte: false, etat: 'pret', nonLu: true, resume: 'Les 3 200 pages sont récupérées, export CSV prêt.', maj: m - 900000 },
       { id: 'f', numero: 99, emoji: '🏢', projet: 'QG', fermeture: true, maj: m - 14000 }
-    ], { apercu: 'La session QG est reprise dans Jarvis Terminal, avec sa conversation d’avant.', maj: m - 300000, nonLu: true, occupe: false });
+    ], { apercu: 'La session QG est reprise dans Jarvis Terminal, avec sa conversation d’avant.', maj: m - 300000, nonLu: true, occupe: false },
+    { victus: { configure: true, etat: 'connecte' } });
+    // aperçu : le panneau du Victus reçoit de faux dossiers
+    var envoyerVrai = envoyer;
+    envoyer = function (o) {
+      envoyerVrai(o);
+      if (o.type === 'dossiers') setTimeout(function () {
+        rendreDossiers({ home: '/home/eliotgrx', liste: [
+          { cwd: '/home/eliotgrx/projets/labo-victus', nom: 'labo-victus', maj: m - 40000 },
+          { cwd: '/home/eliotgrx/projets/scraper', nom: 'scraper', maj: m - 900000 },
+          { cwd: '/home/eliotgrx/Documents/notes', nom: 'notes', maj: m - 86400000 * 3 }
+        ] });
+      }, 50);
+    };
   } else {
     envoyer({ type: 'pret' });
   }

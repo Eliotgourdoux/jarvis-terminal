@@ -814,13 +814,11 @@ textarea.dictee-provisoire { color: var(--dim); }
  * fixes, partagent l'ancrage de la fenêtre (attachment fixed) : la bande du titre et la barre forment une
  * seule pièce. Ailleurs, la coupe varie par élément. Le texte long reste sur --lecture (quasi uni). */
 
-/* Fond « crépuscule » (cycle Lumière, validé le 12/11/2026) : nero, teinte ambre, voile et vignette profonds. */
+/* Fond : nero discret (déjà dé-contrasté dans le fichier), voile de 0,14 et vignette radiale. */
 body {
   background:
-    radial-gradient(125% 100% at 50% 40%, rgba(8,8,10,0) 45%, rgba(8,8,10,.85)),
-    linear-gradient(115deg, transparent 75%, rgba(255,255,255,.02) 100%),
-    linear-gradient(rgba(150,80,20,.36), rgba(150,80,20,.36)),
-    linear-gradient(rgba(8,8,10,.45), rgba(8,8,10,.45)),
+    radial-gradient(125% 100% at 50% 40%, rgba(8,8,10,0) 45%, rgba(8,8,10,.6)),
+    linear-gradient(rgba(8,8,10,.14), rgba(8,8,10,.14)),
     url("../marbre/nero.jpg") center / cover no-repeat,
     var(--fond);
 }
