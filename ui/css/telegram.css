@@ -6,18 +6,21 @@ body.tg { display: flex; flex-direction: column; }
 .tg-tete {
   flex: none; display: flex; align-items: baseline; gap: 9px;
   margin-top: var(--titre-h); padding: 12px 24px 12px;
-  background: var(--surface); border-bottom: 1px solid var(--bord);
+  background-color: var(--surface);
+  background-image: linear-gradient(rgba(8,8,10,.4), rgba(8,8,10,.4)), url("../marbre/portor.jpg");
+  background-size: auto, 1500px auto; background-position: 0 0, 28% 14%; background-attachment: fixed;
+  border-bottom: 1px solid var(--filet); box-shadow: 0 8px 22px rgba(0,0,0,.45); position: relative; z-index: 2;
   -webkit-user-select: none; user-select: none; cursor: default;
 }
 .tg-emoji { font-size: 17px; align-self: center; }
-.tg-nom { font: 650 17px var(--police-titre); color: #fff; }
+.tg-nom { font: 600 18px var(--police-titre); color: var(--texte-fort); }
 .tg-sous { font-size: 12.5px; color: var(--faint); }
 
 .tg-defile { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .tg-defile::-webkit-scrollbar { width: 10px; }
-.tg-defile::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid var(--fond); }
+.tg-defile::-webkit-scrollbar-thumb { background: rgba(201,164,92,.3); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 .tg-colonne { max-width: var(--largeur); margin: 0 auto; padding: 0 28px; box-sizing: border-box; }
-.tg-defile .tg-colonne { padding-top: 18px; padding-bottom: 28px; }
+.tg-defile .tg-colonne { padding-top: 18px; padding-bottom: 28px; min-height: 100%; background: var(--lecture); border-left: 1px solid var(--bord); border-right: 1px solid var(--bord); box-shadow: 0 0 48px rgba(0,0,0,.55); }
 
 .tg-plus {
   display: block; margin: 0 auto 18px; padding: 6px 14px; border-radius: 8px;
@@ -32,12 +35,12 @@ body.tg { display: flex; flex-direction: column; }
 /* Messages d'Eliot : la bulle des sessions */
 .tg-eliot { display: flex; flex-direction: column; align-items: flex-end; margin: 18px 0 8px; }
 .tg-eliot .bulle-meta { text-align: right; }
-.tg-eliot.tg-app .bulle { border-color: #4A3F7A; }
+.tg-eliot.tg-app .bulle { border-color: var(--or); }
 
 /* Messages de Jarvis : texte posé sur la page, comme les réponses de Claude */
 .tg-jarvis { margin: 14px 0 20px; }
 .tg-jarvis .tour-tete { margin-bottom: 6px; }
-.tg-jarvis .tour-nom { color: var(--accent); }
+.tg-jarvis .tour-nom { color: var(--or); }
 .tg-etiquette {
   font-size: 11.5px; font-weight: 600; color: var(--dim); padding: 1px 7px; border-radius: 5px;
   background: var(--surface-2); border: 1px solid var(--bord);
@@ -77,18 +80,23 @@ body.tg { display: flex; flex-direction: column; }
 .tg-eliot.tg-echec .bulle-meta { color: var(--rouge); }
 .tg-reprendre { margin-left: 6px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--bord); background: none;
   color: var(--texte, inherit); font: inherit; font-size: 12px; cursor: pointer; }
-.tg-reprendre:hover { border-color: var(--accent); }
+.tg-reprendre:hover { border-color: var(--or-clair); }
 
 /* Pied : statut + saisie */
-.tg-pied { flex: none; padding: 10px 0 14px; background: var(--fond); border-top: 1px solid var(--bord); }
-.tg-statut { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; font-size: 12.5px; color: var(--accent); }
+.tg-pied {
+  flex: none; padding: 10px 0 14px; background-color: var(--fond);
+  background-image: linear-gradient(rgba(8,8,10,.48), rgba(8,8,10,.48)), url("../marbre/portor.jpg");
+  background-size: auto, 1500px auto; background-position: 0 0, 72% 88%; background-attachment: fixed;
+  border-top: 1px solid var(--filet); box-shadow: 0 -10px 26px rgba(0,0,0,.45); position: relative; z-index: 2;
+}
+.tg-statut { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; font-size: 12.5px; color: var(--or-clair); }
 .tg-statut.alerte { color: var(--ambre); }
 .tg-statut .tg-point { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 .tg-saisie {
   display: flex; align-items: flex-end; gap: 10px; padding: 10px 10px 10px 16px;
-  border: 1px solid var(--bord-fort); border-radius: 14px; background: var(--surface);
+  border: 1px solid var(--filet); border-radius: 14px; background: rgba(13,12,15,.92); box-shadow: var(--ombre);
 }
-.tg-saisie:focus-within { border-color: var(--accent); }
+.tg-saisie:focus-within { border-color: var(--or-clair); }
 .tg-saisie textarea {
   flex: 1; min-height: 24px; max-height: 260px; resize: none; padding: 2px 0; margin: 0;
   border: 0; outline: 0; background: transparent; color: var(--texte); font: 15.5px/1.55 var(--police);
@@ -96,9 +104,9 @@ body.tg { display: flex; flex-direction: column; }
 .tg-saisie textarea::placeholder { color: var(--faint); }
 .tg-envoyer {
   flex: none; width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
-  border: 0; border-radius: 9px; background: var(--accent-plein); color: #fff; cursor: pointer;
+  border: 0; border-radius: 9px; background: var(--degrade-or); color: var(--encre); cursor: pointer;
 }
-.tg-envoyer:disabled { background: var(--surface-3); color: var(--faint); cursor: default; }
+.tg-envoyer:disabled { background: var(--noir-bouton); color: var(--faint); cursor: default; }
 .tg-envoyer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .tg-aide { margin: 6px 4px 0; font-size: 11.5px; color: var(--faint); }
 
@@ -108,7 +116,7 @@ body.tg { display: flex; flex-direction: column; }
   border: 0; border-radius: 9px; background: transparent; color: var(--dim); cursor: pointer;
   transition: background-color .12s ease-out, color .12s ease-out;
 }
-.tg-micro:hover { color: #fff; background: var(--surface-3); }
+.tg-micro:hover { color: var(--or-clair); background: var(--noir-bouton); }
 .tg-micro.actif { color: var(--rouge); }
 .tg-micro svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .tg-saisie.enregistre { border-color: var(--rouge); }
@@ -121,7 +129,7 @@ body.tg { display: flex; flex-direction: column; }
 .tg-vocal-aide { font-size: 12px; color: var(--faint); white-space: nowrap; }
 .tg-vocal-annuler { margin-left: auto; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--bord); background: none;
   color: var(--dim); font: 500 12.5px var(--police); cursor: pointer; }
-.tg-vocal-annuler:hover { color: #fff; border-color: var(--bord-fort); }
+.tg-vocal-annuler:hover { color: var(--texte-fort); border-color: var(--or-clair); }
 @media (max-width: 560px) { .tg-vocal-aide { display: none; } }
 
 .tg-en-bas {

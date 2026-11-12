@@ -3,8 +3,8 @@
 (function () {
   'use strict';
   var BASE = ':root{color-scheme:dark}' +
-    'body{margin:14px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:#ECECF1;background:#0C0D10}' +
-    'a{color:#B3A1FF}';
+    'body{margin:14px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:#EFE9DD;background:#0D0C0F}' +
+    'a{color:#E3C887}';
 
   function rapport() {
     function hauteur() {

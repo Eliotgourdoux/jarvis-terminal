@@ -7,8 +7,8 @@
   max-height: 38vh; overflow-y: auto;
 }
 .agents-titre {
-  padding: 0 8px 4px; font: 600 11.5px var(--police); letter-spacing: .02em;
-  color: var(--faint); text-transform: uppercase;
+  padding: 0 8px 4px; font: 600 10.5px var(--police); letter-spacing: .12em;
+  color: var(--or); text-transform: uppercase;
 }
 .agent-tete {
   display: grid; grid-template-columns: 8px minmax(0, max-content) minmax(0, 1fr) auto; align-items: center; gap: 10px;

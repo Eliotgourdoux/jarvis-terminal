@@ -1,37 +1,53 @@
-/* Better Terminal For Claude — interface de lecture, fond OPAQUE (demande d'Eliot, 07/11/2026).
- * Règles : aucun fond transparent, aucun flou, aucun dégradé décoratif, aucune lueur.
- * Le texte de Claude est posé directement sur la page, comme un document.
- * Une seule couleur d'accent (violet), l'ambre pour « Claude t'attend ». Aucune animation en boucle. */
+/* Jarvis Terminal — charte « marbre » (demande d'Eliot, 12/11/2026), sœur de celle de Cockpit.
+ * Matière : plaques JPEG de ui/marbre/ (nero, portor, verde, rosso, calacatta), jamais recalculées en CSS.
+ * Le marbre habille le cadre (fond, en-têtes, bords, boutons) ; le texte long reste posé sur un fond quasi uni.
+ * Or (#C9A45C) pour l'accent, ivoire pour le texte, serif pour les titres. Aucune animation en boucle,
+ * aucun néon, aucune lueur ; transitions de survol ≤ 0,15 s. Plaques : section « Charte marbre » en fin de fichier. */
 
 :root {
-  --fond: #111216;
-  --surface: #18191F;
-  --surface-2: #1F2129;
-  --surface-3: #282B35;
-  --code: #0C0D10;
-  --bord: #2A2C36;
-  --bord-fort: #3A3D4A;
+  --fond: #0B0A0C;
+  --surface: #141216;
+  --surface-2: #1B181C;
+  --surface-3: #262126;
+  --code: #0D0C0F;
+  --lecture: rgba(14, 13, 16, .93);
+  --bord: rgba(201, 164, 92, .2);
+  --bord-fort: rgba(201, 164, 92, .4);
+  --filet: rgba(201, 164, 92, .55);
 
-  --texte: #ECECF1;
-  --texte-claude: #E3E3EA;
-  --dim: #B3B6C2;
-  --faint: #868A99;
+  --texte: #EFE9DD;
+  --texte-fort: #FAF5EA;
+  --texte-claude: #E9E3D6;
+  --dim: #B9B1A3;
+  --faint: #8C8476;
+  --encre: #1C1814;
 
-  --accent: #9D84FF;
-  --accent-plein: #7B61F0;
-  --accent-fond: #241F3D;
-  --lien: #7CC8F5;
-  --ambre: #F2B252;
-  --ambre-fond: #2A2216;
-  --vert: #57D69A;
-  --vert-fond: #15261E;
-  --rouge: #F0757E;
-  --rouge-texte: #F7A6AC;
-  --rouge-fond: #2B181B;
+  --or: #C9A45C;
+  --or-clair: #E3C887;
+  --or-fonce: #8E6E33;
+  --accent: var(--or);
+  --accent-plein: #B8914A;
+  --accent-fond: #2A2316;
+  --lien: var(--or-clair);
+  --verde-clair: #9CC8B0;
+  --ambre: #E8B04B;
+  --ambre-fond: #2A2010;
+  --vert: #6FCF97;
+  --vert-fond: #11231A;
+  --rouge: #E07A6F;
+  --rouge-texte: #F0A79E;
+  --rouge-fond: #2B1614;
   /* Anciens noms encore utilisés par le code et jarvis.css */
   --cyan: var(--lien); --violet: var(--accent); --rose: var(--accent);
 
-  --police-titre: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  /* Voiles posés sur le marbre (rgba(8,8,10,…)) et ombre portée profonde et douce. */
+  --voile: rgba(8, 8, 10, .5);
+  --voile-fort: rgba(8, 8, 10, .8);
+  --noir-bouton: rgba(8, 8, 10, .55);
+  --ombre: 0 10px 28px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .35);
+  --degrade-or: linear-gradient(180deg, #E3C887, #B8914A);
+
+  --police-titre: "New York", ui-serif, Georgia, serif;
   --police: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --police-code: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, monospace;
   --largeur: 760px;
@@ -58,7 +74,7 @@ body::before {
   background: var(--surface); z-index: 19; pointer-events: none;
 }
 [hidden] { display: none !important; }
-::selection { background: rgba(157,132,255,.38); }
+::selection { background: rgba(201,164,92,.38); }
 button { font: inherit; color: inherit; }
 button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible, input:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
@@ -93,7 +109,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 }
 .barre-projet { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 0 1 auto; }
 .barre-emoji { font-size: 18px; line-height: 1; }
-.barre-nom { font: 600 15px/1.2 var(--police-titre); color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 6em; }
+.barre-nom { font: 600 16px/1.2 var(--police-titre); color: var(--texte-fort); letter-spacing: .005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 6em; }
 .barre-espace { flex: 1 1 0; min-width: 4px; }
 
 .barre-etat {
@@ -104,7 +120,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
   background: var(--surface-2); border: 1px solid var(--bord);
 }
 .barre-etat.etat-travaille { --c: var(--lien); }
-.barre-etat.etat-attend { --c: var(--ambre); color: var(--ambre); border-color: #5A4524; background: var(--ambre-fond); }
+.barre-etat.etat-attend { --c: var(--ambre); color: var(--ambre); border-color: rgba(232,176,75,.55); background: rgba(42,32,16,.82); }
 .barre-etat.etat-termine { --c: var(--faint); }
 .point { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--c, var(--faint)); }
 
@@ -115,12 +131,12 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
   font: 500 13px var(--police); white-space: nowrap; cursor: pointer;
   transition: background-color .12s ease-out, color .12s ease-out, border-color .12s ease-out;
 }
-.barre-bouton:hover { background: var(--surface-3); color: #fff; }
-.barre-bouton.actif { background: var(--accent-fond); border-color: #463A78; color: #fff; }
-.barre-bouton.fermer:hover { background: var(--rouge-fond); border-color: #5C2C31; color: var(--rouge-texte); }
-.barre-bouton.arme { background: var(--ambre-fond); border-color: #5A4524; color: var(--ambre); }
+.barre-bouton:hover { background: rgba(8,8,10,.72); color: var(--texte-fort); border-color: var(--or-clair); }
+.barre-bouton.actif { background: rgba(42,35,22,.85); border-color: var(--or); color: var(--texte-fort); }
+.barre-bouton.fermer:hover { background: rgba(43,22,20,.85); border-color: rgba(224,122,111,.6); color: var(--rouge-texte); }
+.barre-bouton.arme { background: rgba(42,32,16,.85); border-color: rgba(232,176,75,.6); color: var(--ambre); }
 .barre-bouton:disabled { opacity: .4; cursor: default; }
-.barre-bouton:disabled:hover { background: var(--surface-2); color: var(--dim); }
+.barre-bouton:disabled:hover { background: var(--noir-bouton); color: var(--dim); border-color: var(--bord-fort); }
 .barre-bouton .compte {
   font: 600 11.5px var(--police); color: var(--texte); min-width: 1.4em; text-align: center;
   padding: 0 6px; border-radius: 5px; background: var(--surface-3);
@@ -134,7 +150,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
   background: var(--surface-2); color: var(--faint); font: 500 12px var(--police);
   transition: background-color .12s ease-out; cursor: pointer;
 }
-.barre-choix:hover { background: var(--surface-3); }
+.barre-choix:hover { background: rgba(8,8,10,.72); border-color: var(--or-clair); }
 .barre-choix:focus-within { border-color: var(--accent); }
 .barre-choix::after {
   content: ""; position: absolute; right: 11px; top: 11px; width: 5px; height: 5px; pointer-events: none;
@@ -147,9 +163,9 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 }
 .barre-choix select:focus-visible { outline: none; }
 .barre-choix select:disabled { color: var(--faint); cursor: default; }
-/* Permissions : le mode le plus ouvert (bypass) se signale en ambre, le mode plan en violet. */
+/* Permissions : le mode le plus ouvert (bypass) se signale en ambre, le mode plan en vert pâle (verde). */
 .barre-choix.permission-libre select, .barre-choix.permission-libre .choix-bouton { color: var(--ambre); }
-.barre-choix.permission-plan select, .barre-choix.permission-plan .choix-bouton { color: var(--accent); }
+.barre-choix.permission-plan select, .barre-choix.permission-plan .choix-bouton { color: var(--verde-clair); }
 
 /* Total de jetons de la session : discret, chiffres alignés. */
 .barre-jetons {
@@ -185,7 +201,7 @@ body.pret .fil { opacity: 1; transition: opacity .2s ease-out; }
   background: var(--surface-3);
   border: 1px solid var(--bord-fort);
 }
-.bulle-texte { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.55; color: #F4F4F7; }
+.bulle-texte { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.55; color: var(--encre); }
 .bulle-texte.commande { font: 14px/1.5 var(--police-code); }
 .bulle.longue .bulle-texte { max-height: 15.5em; overflow: hidden;
   -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
@@ -202,7 +218,7 @@ body.pret .fil { opacity: 1; transition: opacity .2s ease-out; }
   border: 0; border-radius: 6px; padding: 0; cursor: pointer; background: transparent; color: var(--dim);
   transition: background-color .12s ease-out, color .12s ease-out;
 }
-.eliot-action:hover { color: #fff; background: var(--surface-3); }
+.eliot-action:hover { color: var(--or-clair); background: var(--surface-3); }
 .eliot-action.fait { color: var(--vert); }
 .eliot-action .icone { width: 14px; height: 14px; }
 
@@ -212,7 +228,7 @@ body.pret .fil { opacity: 1; transition: opacity .2s ease-out; }
   content-visibility: auto; contain-intrinsic-size: auto 260px;
 }
 .tour-tete { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font: 600 12.5px var(--police); color: var(--faint); }
-.tour-nom { color: var(--accent); }
+.tour-nom { color: var(--or); font: 600 14.5px var(--police-titre); letter-spacing: .01em; }
 .tour-corps > * + * { margin-top: 14px; }
 .tour-corps > .activite + .activite { margin-top: 6px; }
 
@@ -221,30 +237,30 @@ body.pret .fil { opacity: 1; transition: opacity .2s ease-out; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p { margin: 0 0 .85em; }
-.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-family: var(--police-titre); color: #fff; line-height: 1.3; }
-.md h1 { font-size: 25px; font-weight: 700; margin: 1.3em 0 .55em; letter-spacing: -.01em; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-family: var(--police-titre); color: var(--texte-fort); line-height: 1.3; }
+.md h1 { font-size: 27px; font-weight: 650; margin: 1.3em 0 .55em; letter-spacing: -.01em; }
 .md h2 { font-size: 20px; font-weight: 650; margin: 1.35em 0 .5em; padding-bottom: .3em; border-bottom: 1px solid var(--bord); }
 .md h3 { font-size: 17px; font-weight: 600; margin: 1.2em 0 .4em; }
 .md h4, .md h5, .md h6 { font-size: 15.5px; font-weight: 600; margin: 1em 0 .35em; color: var(--dim); }
-.md strong { font-weight: 650; color: #fff; }
+.md strong { font-weight: 650; color: var(--texte-fort); }
 .md em { font-style: italic; }
 .md del { color: var(--faint); }
-.md a.lien { color: var(--lien); text-decoration: underline; text-decoration-color: rgba(124,200,245,.4); text-underline-offset: 2px; cursor: pointer; }
+.md a.lien { color: var(--lien); text-decoration: underline; text-decoration-color: rgba(227,200,135,.4); text-underline-offset: 2px; cursor: pointer; }
 .md a.lien:hover { text-decoration-color: var(--lien); }
 .md ul, .md ol { margin: .4em 0 .95em; padding-left: 1.5em; }
 .md li { margin: .3em 0; padding-left: .15em; }
 .md li > ul, .md li > ol { margin: .2em 0 .3em; }
-.md ul > li::marker { color: var(--faint); }
-.md ol > li::marker { color: var(--faint); font-variant-numeric: tabular-nums; font-weight: 600; }
+.md ul > li::marker { color: var(--or); }
+.md ol > li::marker { color: var(--or); font-variant-numeric: tabular-nums; font-weight: 600; }
 .md li.tache { list-style: none; margin-left: -1.35em; }
 .md li.tache input { accent-color: var(--vert); margin: 0 .5em 0 0; vertical-align: -1px; }
-.md blockquote { margin: 1em 0; padding: 2px 0 2px 16px; color: var(--dim); border-left: 3px solid var(--bord-fort); }
-.md code { font: .87em var(--police-code); padding: .12em .4em; border-radius: 5px; background: var(--surface-3); color: #EDE7FF; }
+.md blockquote { margin: 1em 0; padding: 2px 0 2px 16px; color: var(--dim); border-left: 3px solid var(--or-fonce); }
+.md code { font: .87em var(--police-code); padding: .12em .4em; border-radius: 5px; background: #221E1A; color: #F0DFC0; }
 .md code.court { white-space: nowrap; }
 .md hr { border: 0; height: 1px; background: var(--bord); margin: 1.5em 0; }
 .md .resume-final {
   margin-top: 1.1em; padding: 10px 14px; border-radius: 8px;
-  background: var(--vert-fond); border: 1px solid #24483A; color: #CDF3DF;
+  background: var(--vert-fond); border: 1px solid rgba(111,207,151,.35); color: #CFEBD9;
 }
 .md a.lien-image { color: var(--lien); }
 .md-petit { font-size: 14px; line-height: 1.55; }
@@ -252,12 +268,12 @@ body.pret .fil { opacity: 1; transition: opacity .2s ease-out; }
 
 .tableau { overflow-x: auto; margin: 1em 0; border-radius: 8px; border: 1px solid var(--bord); background: var(--surface); }
 .tableau table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.45; }
-.tableau th { text-align: left; font: 600 13.5px var(--police); color: #fff; background: var(--surface-2); }
+.tableau th { text-align: left; font: 600 13.5px var(--police); color: var(--or-clair); background: #1A1712; }
 .tableau th, .tableau td { padding: 9px 14px; border-bottom: 1px solid var(--bord); vertical-align: top; }
 .tableau tr:last-child td { border-bottom: 0; }
 .tableau td code { font-size: .84em; }
 
-.bloc-texte.est-erreur { padding: 10px 14px; border-radius: 8px; background: var(--rouge-fond); border: 1px solid #5C2C31; }
+.bloc-texte.est-erreur { padding: 10px 14px; border-radius: 8px; background: var(--rouge-fond); border: 1px solid rgba(224,122,111,.4); }
 
 /* ---------- Blocs de code ---------- */
 .bloc-code { margin: 1em 0; border-radius: 8px; overflow: hidden; background: var(--code); border: 1px solid var(--bord); }
@@ -272,11 +288,11 @@ body.pret .fil { opacity: 1; transition: opacity .2s ease-out; }
   font: 500 12px var(--police); color: var(--dim); background: var(--surface-2);
   transition: background-color .12s ease-out, color .12s ease-out;
 }
-.bt-copier:hover, .bt-plus:hover { color: #fff; background: var(--surface-3); }
+.bt-copier:hover, .bt-plus:hover { color: var(--texte-fort); background: var(--surface-3); border-color: var(--or-clair); }
 .bt-copier.fait { color: var(--vert); }
 .bt-plus { margin-top: 8px; }
 .bloc-code pre { margin: 0; padding: 12px 16px 14px; overflow-x: auto; font: 13.5px/1.6 var(--police-code); tab-size: 4; }
-.bloc-code pre code, .md .bloc-code code { font: inherit; padding: 0; border-radius: 0; background: none; color: #E4E4EC; }
+.bloc-code pre code, .md .bloc-code code { font: inherit; padding: 0; border-radius: 0; background: none; color: #E9E3D6; }
 
 /* ---------- Lignes d'outils et de réflexion ---------- */
 .activite { display: flex; flex-direction: column; gap: 4px; }
@@ -298,7 +314,7 @@ details.ligne[open] { border-color: var(--bord-fort); }
 .ligne-nom { flex: none; font: 600 13.5px var(--police); color: var(--texte); }
 .reflexion .ligne-nom { color: var(--dim); font-weight: 500; }
 .ligne-cible { flex: 1 1 auto; min-width: 0; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ligne-cible.mono, .etape .mono { font: 12.5px var(--police-code); color: #CFCBE0; }
+.ligne-cible.mono, .etape .mono { font: 12.5px var(--police-code); color: #D3CABA; }
 .ligne-etat { flex: none; font-size: 12px; color: var(--faint); white-space: nowrap; }
 .statut-erreur .ligne-etat { color: var(--rouge-texte); }
 .statut-attend .ligne-etat, .statut-interrompu .ligne-etat { color: var(--ambre); }
@@ -322,18 +338,18 @@ details[open] > summary .chevron { transform: rotate(45deg); margin-bottom: 4px;
 .ligne-detail .bloc-code pre { font-size: 12.5px; max-height: 460px; overflow: auto; }
 pre.sortie {
   margin: 0; padding: 10px 12px; border-radius: 6px; max-height: 420px; overflow: auto;
-  background: var(--code); border: 1px solid var(--bord); font: 12.5px/1.5 var(--police-code); color: #DEDEE6;
+  background: var(--code); border: 1px solid var(--bord); font: 12.5px/1.5 var(--police-code); color: #E2DCCF;
   white-space: pre-wrap; word-break: break-word;
 }
-pre.sortie.erreur { color: var(--rouge-texte); background: var(--rouge-fond); border-color: #5C2C31; }
+pre.sortie.erreur { color: var(--rouge-texte); background: var(--rouge-fond); border-color: rgba(224,122,111,.4); }
 pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 13px; }
 .sortie-limitee > .bt-plus { margin-top: 6px; }
 .od-images img { display: block; max-width: 100%; max-height: 320px; margin: 6px 0; border-radius: 6px; }
 .diff { margin: 6px 0; border-radius: 6px; overflow: auto; max-height: 460px; background: var(--code); border: 1px solid var(--bord); font: 12.5px/1.5 var(--police-code); }
 .d-ligne { display: flex; padding: 0 12px; white-space: pre-wrap; word-break: break-word; }
-.d-add { background: #12281D; color: #C9F2DB; }
-.d-del { background: #2D171A; color: #F8CDD1; }
-.d-ctx { color: #C6C6D0; }
+.d-add { background: #10251A; color: #CDEBD8; }
+.d-del { background: #2B1614; color: #F5CFC9; }
+.d-ctx { color: #C9C1B3; }
 .d-signe { flex: none; width: 14px; color: var(--faint); user-select: none; }
 .d-entete { padding: 3px 12px; font: 11.5px var(--police); color: var(--faint); background: var(--surface); }
 .todos { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 3px; }
@@ -358,7 +374,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 /* ---------- Notes, fins de tour, séparateurs ---------- */
 .note { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; color: var(--faint); }
 .note.niveau-avert { color: var(--ambre); }
-.note.niveau-erreur { color: var(--rouge-texte); padding: 9px 14px; border-radius: 8px; background: var(--rouge-fond); border: 1px solid #5C2C31; }
+.note.niveau-erreur { color: var(--rouge-texte); padding: 9px 14px; border-radius: 8px; background: var(--rouge-fond); border: 1px solid rgba(224,122,111,.4); }
 .note-libre {
   width: fit-content; max-width: 90%; margin: 14px auto; justify-content: center; text-align: center;
   padding: 4px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--bord); font-size: 12.5px;
@@ -377,7 +393,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 .question {
   position: relative; padding: 16px 18px 16px 20px; border-radius: 10px;
   background: var(--surface);
-  border: 1px solid #6A5128;
+  border: 1px solid rgba(232,176,75,.55);
   box-shadow: inset 3px 0 0 var(--ambre);
 }
 .question.repondue, .question.annulee { border-color: var(--bord); box-shadow: inset 3px 0 0 var(--bord-fort); }
@@ -387,7 +403,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 .question-compte { font-size: 12px; color: var(--faint); }
 .q-bloc + .q-bloc { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--bord); }
 .q-entete { margin-top: 2px; }
-.q-texte { margin: 6px 0 10px; font: 600 17px/1.4 var(--police-titre); color: #fff; }
+.q-texte { margin: 6px 0 10px; font: 600 18px/1.4 var(--police-titre); color: var(--texte-fort); }
 .q-aide { margin: -4px 0 9px; font-size: 12.5px; color: var(--faint); }
 .q-options { display: grid; gap: 6px; }
 .q-option {
@@ -396,7 +412,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   background: var(--surface-2); border: 1px solid var(--bord); color: var(--texte);
   transition: background-color .12s ease-out, border-color .12s ease-out;
 }
-.q-option:hover:not([disabled]) { background: var(--surface-3); border-color: var(--bord-fort); }
+.q-option:hover:not([disabled]) { background: rgba(8,8,10,.75); border-color: var(--or-clair); }
 .q-option.choisie { background: var(--accent-fond); border-color: var(--accent); }
 .q-option[disabled] { cursor: default; }
 .question.repondue .q-option:not(.choisie), .question.annulee .q-option { opacity: .5; }
@@ -432,15 +448,15 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   font: 600 14px var(--police);
   transition: background-color .12s ease-out, color .12s ease-out, border-color .12s ease-out;
 }
-.bouton-principal { color: #fff; border: 1px solid var(--accent-plein); background: var(--accent-plein); }
-.bouton-principal:hover:not(:disabled) { background: #8A72F4; }
-.bouton-principal:disabled { cursor: default; background: var(--surface-2); border-color: var(--bord); color: var(--faint); }
-.bouton-secondaire { color: var(--texte); border: 1px solid var(--bord-fort); background: var(--surface-2); }
-.bouton-secondaire:hover { background: var(--surface-3); }
-.bouton-refus { color: var(--rouge-texte); border: 1px solid #5C2C31; background: var(--rouge-fond); }
-.bouton-refus:hover { background: #3A1E22; }
+.bouton-principal { color: var(--encre); border: 1px solid var(--or-fonce); background: var(--degrade-or); }
+.bouton-principal:hover:not(:disabled) { background: linear-gradient(180deg, #EBD49B, #C49C55); border-color: var(--or); }
+.bouton-principal:disabled { cursor: default; background: var(--noir-bouton); border-color: var(--bord); color: var(--faint); }
+.bouton-secondaire { color: var(--texte); border: 1px solid var(--filet); background: var(--noir-bouton); }
+.bouton-secondaire:hover { background: rgba(8,8,10,.72); border-color: var(--or-clair); }
+.bouton-refus { color: var(--rouge-texte); border: 1px solid rgba(224,122,111,.5); background: var(--rouge-fond); }
+.bouton-refus:hover { background: #3A1C19; border-color: var(--rouge); }
 .bouton-discret { color: var(--dim); border: 1px solid transparent; background: transparent; font-weight: 500; }
-.bouton-discret:hover { color: #fff; background: var(--surface-2); }
+.bouton-discret:hover { color: var(--or-clair); background: var(--noir-bouton); }
 .petit { padding: 5px 12px; font-size: 13px; }
 
 /* ---------- Pied : un bandeau plein en bas, la saisie centrée dedans ---------- */
@@ -461,13 +477,13 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   box-shadow: 0 4px 12px rgba(0,0,0,.45);
   transition: color .12s ease-out, border-color .12s ease-out;
 }
-.pastille-bas:hover { color: #fff; }
-.pastille-bas.nouveau { color: #fff; border-color: var(--accent); }
+.pastille-bas:hover { color: var(--texte-fort); border-color: var(--or-clair); }
+.pastille-bas.nouveau { color: var(--texte-fort); border-color: var(--or); }
 
 .banniere {
   display: flex; align-items: center; gap: 12px;
   padding: 9px 10px 9px 14px; border-radius: 10px;
-  background: var(--ambre-fond); border: 1px solid #6A5128;
+  background: var(--ambre-fond); border: 1px solid rgba(232,176,75,.55);
 }
 .banniere-point { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ambre); }
 .banniere-texte { flex: 1; min-width: 0; }
@@ -482,7 +498,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   border: 1px solid var(--bord-fort);
   transition: border-color .12s ease-out;
 }
-.saisie:focus-within { border-color: var(--accent); }
+.saisie:focus-within { border-color: var(--or-clair); }
 .saisie textarea {
   display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 2px 6px 2px 0;
   min-height: 25px; max-height: 40vh; resize: none; border: 0; outline: 0; background: transparent;
@@ -507,7 +523,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 .piece-retirer {
   position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; padding: 0; border-radius: 50%;
   display: grid; place-items: center; border: 0; cursor: pointer;
-  background: rgba(17,18,22,.85); color: var(--texte); font: 600 14px/1 var(--police);
+  background: rgba(12,11,13,.85); color: var(--texte); font: 600 14px/1 var(--police);
 }
 .piece-retirer:hover { background: var(--rouge-fond); color: var(--rouge-texte); }
 .bouton-joindre {
@@ -523,28 +539,29 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 .bulle.avec-images .bulle-texte { padding: 0 9px; }
 .visionneuse {
   position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 32px;
-  background: rgba(10,10,13,.92); cursor: zoom-out;
+  background: rgba(8,8,10,.92); cursor: zoom-out;
 }
 .visionneuse img { max-width: 100%; max-height: 100%; border-radius: 8px; }
 .bouton-envoi {
   flex: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--accent-plein); background: var(--accent-plein);
-  transition: background-color .12s ease-out, opacity .12s ease-out;
+  border: 1px solid var(--or-fonce); background: var(--degrade-or);
+  transition: border-color .12s ease-out, opacity .12s ease-out;
 }
-.bouton-envoi:hover:not(:disabled) { background: #8A72F4; }
-.bouton-envoi:disabled { opacity: .35; cursor: default; }
+.bouton-envoi:hover:not(:disabled) { background: linear-gradient(180deg, #EBD49B, #C49C55); border-color: var(--or); }
+.bouton-envoi:disabled { cursor: default; background: var(--noir-bouton); border-color: var(--bord-fort); }
+.bouton-envoi:disabled .fleche { color: var(--or-fonce); }
 .bouton-arret {
   flex: none; height: 30px; padding: 0 13px; border-radius: 8px; cursor: pointer;
   font: 600 13px var(--police); color: var(--rouge-texte);
-  background: var(--rouge-fond); border: 1px solid #5C2C31;
+  background: var(--rouge-fond); border: 1px solid rgba(224,122,111,.5);
 }
-.bouton-arret:hover { background: #3A1E22; }
+.bouton-arret:hover { background: #3A1C19; border-color: var(--rouge); }
 
 .fleche { display: inline-block; width: 7px; height: 7px; border-left: 2px solid currentColor; border-top: 2px solid currentColor; }
 .fleche.haut { transform: translateY(2px) rotate(45deg); }
 .fleche.bas { transform: translateY(-2px) rotate(225deg); }
-.bouton-envoi .fleche { width: 9px; height: 9px; color: #fff; }
+.bouton-envoi .fleche { width: 9px; height: 9px; color: var(--encre); }
 .croix { position: relative; display: inline-block; width: 11px; height: 11px; }
 .croix::before, .croix::after { content: ""; position: absolute; left: 5px; top: -1px; width: 1.6px; height: 13px; background: currentColor; transform: rotate(45deg); }
 .croix::after { transform: rotate(-45deg); }
@@ -559,7 +576,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   box-shadow: 0 12px 32px rgba(0,0,0,.55);
 }
 .popover-tete { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px 8px; border-bottom: 1px solid var(--bord); }
-.popover-titre { font: 600 14.5px var(--police); }
+.popover-titre { font: 600 15px var(--police-titre); color: var(--texte-fort); }
 .popover-aide { font-size: 11.5px; color: var(--faint); }
 .popover-liste { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
 .popover-ligne {
@@ -586,7 +603,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   width: 240px; height: 30px; box-sizing: border-box; padding: 0 11px; outline: 0; border-radius: 6px;
   background: var(--fond); border: 1px solid var(--bord); color: var(--texte); font: 14px var(--police);
 }
-.recherche input:focus { border-color: var(--accent); }
+.recherche input:focus { border-color: var(--or-clair); }
 .recherche input::placeholder { color: var(--faint); }
 .recherche.aucun input { border-color: var(--rouge); }
 .recherche-compte { min-width: 78px; padding: 0 6px; font-size: 12.5px; color: var(--dim); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -595,15 +612,15 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   display: inline-flex; align-items: center; justify-content: center; background: transparent;
   transition: background-color .12s ease-out, color .12s ease-out;
 }
-.recherche button:hover { background: var(--surface-3); color: #fff; }
-::highlight(bt-recherche) { background-color: rgba(242,178,82,.35); color: #fff; }
+.recherche button:hover { background: var(--surface-3); color: var(--or-clair); }
+::highlight(bt-recherche) { background-color: rgba(232,176,75,.35); color: var(--texte-fort); }
 ::highlight(bt-recherche-actif) { background-color: var(--ambre); color: #1b1205; }
 
 /* ---------- Entrée unique et repère de saut ---------- */
 @keyframes ng-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .ng-enter { animation: ng-in .2s ease-out both; }
-@keyframes repere { from { outline-color: rgba(157,132,255,.9); } to { outline-color: rgba(157,132,255,0); } }
-.repere .bulle, .question.repere, .tour-claude.repere { outline: 2px solid rgba(157,132,255,0); outline-offset: 6px; animation: repere 1.3s ease-out; }
+@keyframes repere { from { outline-color: rgba(201,164,92,.9); } to { outline-color: rgba(201,164,92,0); } }
+.repere .bulle, .question.repere, .tour-claude.repere { outline: 2px solid rgba(201,164,92,0); outline-offset: 6px; animation: repere 1.3s ease-out; }
 .question.repere { animation: repere 1.3s ease-out; }
 /* content-visibility rogne ce qui dépasse du bloc : levé le temps du repère, sinon le cadre est coupé. */
 .tour-eliot.repere, .tour-claude.repere, .tour-claude:has(.question.repere) { content-visibility: visible; }
@@ -697,7 +714,7 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
   border-left: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: rotate(-45deg);
 }
 .choix-item:disabled { color: var(--faint); cursor: default; }
-.choix-groupe { padding: 8px 10px 3px; font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--bord); margin-top: 4px; }
+.choix-groupe { padding: 8px 10px 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--or); border-top: 1px solid var(--bord); margin-top: 4px; }
 
 /* ---- Menu des commandes « / » (au-dessus de la saisie) ---- */
 .menu-commandes {
@@ -782,3 +799,156 @@ textarea.dictee-provisoire { color: var(--dim); }
 }
 .saisie-reprise-annuler:hover { background: var(--surface); }
 .fil > .a-oublier { opacity: .35; transition: opacity .15s ease-out; }
+
+/* ================= Charte marbre (12/11/2026) =================
+ * Une plaque = un voile sombre (--v) posé sur une coupe de marbre (--coupe). Les en-têtes et le pied,
+ * fixes, partagent l'ancrage de la fenêtre (attachment fixed) : la bande du titre et la barre forment une
+ * seule pièce. Ailleurs, la coupe varie par élément. Le texte long reste sur --lecture (quasi uni). */
+
+/* Fond : nero discret (déjà dé-contrasté dans le fichier), voile de 0,14 et vignette radiale. */
+body {
+  background:
+    radial-gradient(125% 100% at 50% 40%, rgba(8,8,10,0) 45%, rgba(8,8,10,.6)),
+    linear-gradient(rgba(8,8,10,.14), rgba(8,8,10,.14)),
+    url("../marbre/nero.jpg") center / cover no-repeat,
+    var(--fond);
+}
+/* Petits textes posés directement sur le marbre : ombre noire pour qu'ils se détachent des veines. */
+.titre-fenetre, .mascotte, .barre-jetons, .barre-nom { text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.6); }
+
+/* Portor : le cadre (bande du titre, barre, scène, pied, panneaux, menus). */
+body::before, .barre, .pied, .todo-panneau, .popover, .choix-menu, .menu-commandes, .recherche,
+.bloc-code-tete, .tableau th {
+  --v: var(--voile);
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--v), var(--v)), url("../marbre/portor.jpg");
+  background-size: auto, 1500px auto;
+  background-position: 0 0, var(--coupe, 30% 20%);
+}
+body::before, .barre { --v: rgba(8,8,10,.4); --coupe: 28% 14%; background-attachment: fixed; }
+.barre { border-bottom: 1px solid var(--filet); box-shadow: 0 8px 22px rgba(0,0,0,.45); }
+.titre-fenetre { color: var(--dim); font-family: var(--police-titre); font-weight: 500; letter-spacing: .02em; }
+.pied {
+  --v: rgba(8,8,10,.48); --coupe: 72% 88%; background-attachment: fixed;
+  border-top: 1px solid var(--filet); box-shadow: 0 -10px 26px rgba(0,0,0,.45);
+}
+.todo-panneau { --v: rgba(8,8,10,.66); --coupe: 85% 40%; border-left-color: var(--filet); box-shadow: -14px 0 32px rgba(0,0,0,.5); }
+.popover, .choix-menu, .menu-commandes, .recherche {
+  --v: rgba(8,8,10,.76); --coupe: 60% 30%;
+  border-color: var(--filet); box-shadow: 0 16px 40px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.4);
+}
+.choix-menu { --coupe: 15% 70%; }
+.menu-commandes { --coupe: 45% 55%; }
+
+/* Lecture : une colonne quasi unie au milieu, le marbre noir sur les côtés. */
+.defile { background: transparent; }
+.fil {
+  min-height: 100%; background: var(--lecture);
+  border-left: 1px solid var(--bord); border-right: 1px solid var(--bord);
+  box-shadow: 0 0 48px rgba(0,0,0,.55);
+}
+/* L'espaceur d'ancrage (defilement.js) prolonge la colonne de lecture jusqu'en bas. */
+.espace-ancre {
+  max-width: calc(var(--largeur) + 48px); box-sizing: border-box; margin: 0 auto; background: var(--lecture);
+  border-left: 1px solid var(--bord); border-right: 1px solid var(--bord);
+}
+@media (max-width: 820px) { .fil, .espace-ancre { border-left: 0; border-right: 0; } }
+
+/* Message d'Eliot : plaque de calacatta, texte à l'encre. */
+.bulle {
+  background-color: #EDE6D8;
+  background-image: linear-gradient(rgba(248,244,236,.32), rgba(248,244,236,.32)), url("../marbre/calacatta.jpg");
+  background-size: auto, 1100px auto;
+  background-position: 0 0, 35% 30%;
+  border: 1px solid rgba(142,110,51,.6);
+  box-shadow: var(--ombre);
+}
+.tour-eliot:nth-child(3n+1) .bulle { background-position: 0 0, 70% 65%; }
+.tour-eliot:nth-child(3n+2) .bulle { background-position: 0 0, 10% 85%; }
+.bulle .bt-plus { color: var(--encre); background: rgba(255,255,255,.45); border-color: rgba(142,110,51,.55); }
+.bulle .bt-plus:hover { background: rgba(255,255,255,.7); color: var(--encre); border-color: var(--or-fonce); }
+.bulle-fichiers .fichier { background: rgba(20,18,22,.88); }
+
+/* Boutons secondaires : noir translucide sur le marbre, filet or, icône or. */
+.barre-bouton, .barre-choix, .barre-etat, .barre-vocal, .bt-copier, .bt-plus, .pastille-bas, .note-libre, .puce, .scene-bouton {
+  background: var(--noir-bouton); border-color: var(--bord-fort);
+}
+.barre-bouton, .barre-choix, .bt-copier, .bt-plus { border-color: rgba(201,164,92,.48); color: var(--texte); }
+.barre-bouton svg, .barre-bouton .icone, .bouton-joindre svg { color: var(--or); }
+.barre-bouton:hover svg, .barre-bouton:hover .icone { color: var(--or-clair); }
+.barre-bouton .compte { background: rgba(201,164,92,.16); color: var(--or-clair); }
+.barre-choix::after { border-color: var(--or); }
+.barre-choix:focus-within, .barre-choix.ouvert { border-color: var(--or-clair); }
+.barre-choix.ouvert { background: rgba(8,8,10,.72); }
+.bt-copier, .bt-plus { transition: background-color .12s ease-out, color .12s ease-out, border-color .12s ease-out; }
+.bt-copier.fait { color: var(--vert); }
+.pastille-bas { box-shadow: var(--ombre); background: rgba(10,9,11,.9); }
+.bouton-joindre:hover { background: var(--noir-bouton); border-color: var(--filet); }
+.bouton-envoi .fleche { color: var(--encre); }
+
+/* Saisie et blocs du pied : posés sur le portor, fond noir quasi plein. */
+.saisie { background: rgba(13,12,15,.92); border-color: var(--filet); box-shadow: var(--ombre); }
+.saisie.depot { background: rgba(42,35,22,.92); border-color: var(--or-clair); }
+.td-bloc, .agents { background: rgba(12,11,13,.86); border-color: var(--bord-fort); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+
+/* Verde : ce qui attend Eliot (questions, permissions, bannière d'attente). */
+.question, .banniere {
+  --v: rgba(8,8,10,.56);
+  background-color: #0F1512;
+  background-image: linear-gradient(var(--v), var(--v)), url("../marbre/verde.jpg");
+  background-size: auto, 1400px auto;
+  background-position: 0 0, 40% 35%;
+  box-shadow: inset 3px 0 0 var(--ambre), var(--ombre);
+}
+.banniere { --v: rgba(8,8,10,.46); background-position: 0 0, 75% 70%; box-shadow: var(--ombre); }
+.question.repondue, .question.annulee { --v: rgba(8,8,10,.74); border-color: var(--bord); box-shadow: inset 3px 0 0 var(--or-fonce); }
+.question-marque { font-family: var(--police-titre); font-size: 14.5px; letter-spacing: .01em; }
+.q-option { background: rgba(8,8,10,.58); border-color: var(--bord-fort); }
+.q-option.choisie { background: rgba(42,35,22,.88); border-color: var(--or); }
+.q-libre { background: rgba(10,9,11,.9); border-color: var(--bord-fort); }
+.q-libre:focus { border-color: var(--or-clair); }
+.q-raccourci { border-color: var(--bord-fort); color: var(--or); }
+.question .puce, .q-entete .puce { color: var(--or-clair); border-color: var(--bord-fort); }
+
+/* Rosso : refus, arrêt, erreurs. */
+.bouton-refus, .bouton-arret, .note.niveau-erreur, .bloc-texte.est-erreur {
+  --v: rgba(20,8,8,.42);
+  background-color: var(--rouge-fond);
+  background-image: linear-gradient(var(--v), var(--v)), url("../marbre/rosso.jpg");
+  background-size: auto, 1200px auto;
+  background-position: 0 0, 50% 40%;
+}
+.bouton-refus:hover, .bouton-arret:hover { --v: rgba(20,8,8,.25); background-color: var(--rouge-fond); }
+.note.niveau-erreur, .bloc-texte.est-erreur { --v: rgba(14,8,8,.74); }
+
+/* Outils : la ligne repliée reste une simple ligne ; ouverte, elle devient une carte au chapeau de portor. */
+.ligne-resume { --v: rgba(8,8,10,.5); background-size: auto, 1500px auto; background-position: 0 0, var(--coupe, 40% 30%); }
+details.ligne { background: rgba(14,13,16,.9); border-color: var(--bord); }
+details.ligne[open] { border-color: var(--filet); box-shadow: var(--ombre); }
+details.ligne[open] > .ligne-resume,
+.tour-corps > .activite > details.ligne > .ligne-resume {
+  background-image: linear-gradient(var(--v), var(--v)), url("../marbre/portor.jpg");
+}
+details.ligne[open] > .ligne-resume { border-radius: 8px 8px 0 0; border-bottom: 1px solid var(--bord); }
+details.ligne:nth-child(3n+1) > .ligne-resume { --coupe: 70% 60%; }
+details.ligne:nth-child(3n+2) > .ligne-resume { --coupe: 15% 85%; }
+.ligne-resume:hover { background-color: rgba(201,164,92,.07); --v: rgba(8,8,10,.36); }
+.ligne-detail { border-top: 0; background: #121014; border-radius: 0 0 8px 8px; }
+.activite-liste > details.ligne[open] { background: rgba(14,13,16,.9); border: 1px solid var(--filet); }
+.chevron, .td-chevron { border-color: var(--or); }
+
+/* Blocs de code et tableaux : corps uni, chapeau de marbre, filet or. */
+.bloc-code { border-color: var(--bord-fort); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.bloc-code-tete { --v: rgba(8,8,10,.5); --coupe: 55% 25%; color: var(--or); border-bottom-color: var(--bord); letter-spacing: .02em; }
+.tableau { border-color: var(--bord-fort); background: #121014; }
+.tableau th { --v: rgba(8,8,10,.6); --coupe: 20% 50%; font-family: var(--police-titre); font-size: 14px; }
+
+/* Petits titres de rubrique : capitales espacées, or. */
+.agents-titre, .tp-section-titre, .scene-libelle, .od-titre {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--or);
+}
+.tp-titre, .td-titre { font-family: var(--police-titre); }
+.md h2 { border-bottom-color: var(--bord-fort); }
+.md hr, .separateur::before, .separateur::after { background: linear-gradient(90deg, transparent, var(--bord-fort), transparent); }
+.separateur { font-family: var(--police-titre); color: var(--dim); }
+.compaction-rail, .dictee-rail { background: rgba(201,164,92,.14); }

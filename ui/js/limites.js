@@ -83,7 +83,7 @@
       x.rempli.style.width = Math.max(p, p > 0 ? 2 : 0) + '%';
       // dégradé du vert à la couleur atteinte : on voit le chemin parcouru
       x.rempli.style.background = 'linear-gradient(90deg, ' + couleur(0) + ', ' + (p > 50 ? couleur(50) + ' ' + (5000 / p) + '%, ' : '') + coul + ')';
-      x.rempli.style.boxShadow = '0 0 8px hsla(' + teinte(p) + ', 72%, 58%, .35)';
+      x.rempli.style.boxShadow = 'none';   // charte marbre (12/11/2026) : aucune lueur colorée
       var t = q.resetsAt ? 1 - (q.resetsAt - maintenant) / f.duree : null;
       x.temps.hidden = !(t > 0 && t < 1);
       if (t > 0 && t < 1) x.temps.style.left = (t * 100) + '%';

@@ -2,9 +2,11 @@
 .scene {
   position: fixed; z-index: 15; left: 0; right: 0;
   top: calc(var(--titre-h) + var(--hauteur-barre));
-  background: var(--fond);
-  border-bottom: 1px solid var(--bord);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, .35);
+  background-color: var(--fond);
+  background-image: linear-gradient(rgba(8,8,10,.55), rgba(8,8,10,.55)), url("../marbre/portor.jpg");
+  background-size: auto, 1500px auto; background-position: 0 0, 28% 30%; background-attachment: fixed;
+  border-bottom: 1px solid var(--filet);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45);
 }
 .scene[hidden] { display: none; }
 .scene-boite {

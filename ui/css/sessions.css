@@ -1,26 +1,44 @@
-/* Jarvis Terminal — barre latérale des sessions. Opaque, mêmes jetons que app.css. Aucune animation en boucle. */
+/* Jarvis Terminal — barre latérale des sessions, charte « marbre » (12/11/2026), mêmes jetons que app.css.
+ * Plaque de portor sous un voile sombre, filets or, noms en serif. Seule animation en boucle : le petit
+ * spinner de fermeture, voulu par Eliot. */
 
 :root {
-  --fond: #111216;
-  --surface: #18191F;
-  --surface-2: #1F2129;
-  --surface-3: #282B35;
-  --bord: #2A2C36;
-  --bord-fort: #3A3D4A;
-  --texte: #ECECF1;
-  --dim: #B3B6C2;
-  --faint: #868A99;
-  --accent: #9D84FF;
-  --accent-fond: #241F3D;
-  --ambre: #F2B252;
-  --ambre-fond: #2A2216;
-  --vert: #57D69A;
+  --fond: #0B0A0C;
+  --surface: #141216;
+  --surface-2: #1B181C;
+  --surface-3: #262126;
+  --bord: rgba(201, 164, 92, .2);
+  --bord-fort: rgba(201, 164, 92, .4);
+  --filet: rgba(201, 164, 92, .55);
+  --texte: #EFE9DD;
+  --texte-fort: #FAF5EA;
+  --dim: #B9B1A3;
+  --faint: #8C8476;
+  --or: #C9A45C;
+  --or-clair: #E3C887;
+  --accent: var(--or);
+  --accent-fond: #2A2316;
+  --ambre: #E8B04B;
+  --ambre-fond: #2A2010;
+  --vert: #6FCF97;
+  --rouge: #E07A6F;
   --police: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --police-titre: "New York", ui-serif, Georgia, serif;
   --titre-h: 28px;
   color-scheme: dark;
 }
 
-html, body { margin: 0; height: 100%; background: var(--surface); }
+html, body { margin: 0; height: 100%; background: var(--fond); }
+body {
+  background:
+    radial-gradient(140% 100% at 30% 30%, rgba(8,8,10,0) 40%, rgba(8,8,10,.55)),
+    linear-gradient(rgba(8,8,10,.34), rgba(8,8,10,.34)),
+    url("../marbre/portor.jpg") 12% 30% / 1500px auto no-repeat,
+    var(--fond);
+  box-shadow: inset -1px 0 0 var(--bord-fort);
+}
+/* Petits textes posés directement sur le marbre : ombre noire. */
+.tete, .liste, .vide, .pied { text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.55); }
 body {
   color: var(--texte); font: 13px/1.4 var(--police);
   -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
@@ -37,29 +55,30 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
   flex: none; display: flex; align-items: center; gap: 8px;
   margin-top: var(--titre-h); padding: 8px 10px 8px 16px;
 }
-.tete-titre { flex: 1; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.tete-titre { flex: 1; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--or); }
 .nouvelle {
   width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
-  border: 1px solid var(--bord); border-radius: 7px; background: var(--surface-2); color: var(--dim); cursor: pointer;
+  border: 1px solid rgba(201,164,92,.48); border-radius: 7px; background: rgba(8,8,10,.55); color: var(--or); cursor: pointer;
+  transition: border-color .12s ease-out, color .12s ease-out;
 }
-.nouvelle:hover { background: var(--surface-3); color: var(--texte); border-color: var(--bord-fort); }
+.nouvelle:hover { color: var(--or-clair); border-color: var(--or-clair); }
 .nouvelle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 
 .liste { flex: 1; overflow-y: auto; padding: 2px 8px 8px; display: flex; flex-direction: column; gap: 2px; }
 .liste::-webkit-scrollbar { width: 8px; }
-.liste::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+.liste::-webkit-scrollbar-thumb { background: rgba(201,164,92,.3); border-radius: 4px; }
 
 .item {
   position: relative; display: block; width: 100%; box-sizing: border-box; text-align: left;
   padding: 8px 10px 9px 12px; border: 1px solid transparent; border-radius: 8px;
   background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
-.item:hover { background: var(--surface-2); }
-.item.actif { background: var(--surface-3); border-color: var(--bord-fort); }
+.item:hover { background: rgba(8,8,10,.45); border-color: var(--bord); }
+.item.actif { background: rgba(10,9,11,.78); border-color: var(--filet); box-shadow: 0 8px 22px rgba(0,0,0,.5); }
 .item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* Claude attend une réponse : liseré ambre, visible même quand la session n'est pas affichée. */
-.item.attend { background: var(--ambre-fond); border-color: #5A4420; }
+.item.attend { background: rgba(42,32,16,.82); border-color: rgba(232,176,75,.45); }
 .item.attend.actif { border-color: var(--ambre); }
 .item.attend::before {
   content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--ambre);
@@ -67,7 +86,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 
 .ligne1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .emoji { flex: none; font-size: 14px; line-height: 1; }
-.projet { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.projet { flex: 1; min-width: 0; font: 600 14.5px var(--police-titre); color: var(--texte-fort); letter-spacing: .005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dossier { font-weight: 400; color: var(--faint); }
 .raccourci { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .fermer {
@@ -75,12 +94,12 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
   border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer;
 }
 .fermer svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
-.fermer:hover { background: var(--bord-fort); color: var(--texte); }
+.fermer:hover { background: rgba(8,8,10,.6); color: var(--or-clair); }
 .item:hover .fermer, .item:focus-within .fermer { display: grid; }
 .item:hover .raccourci, .item:focus-within .raccourci { display: none; }
 
 .etat { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--faint); }
-.point { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--bord-fort); }
+.point { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
 .etat .temps { margin-left: auto; font-variant-numeric: tabular-nums; }
 .e-travaille .point { background: var(--accent); }
 .e-travaille .etat-texte { color: var(--accent); }
@@ -99,7 +118,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 .lien { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
 .lien:hover { text-decoration: underline; }
 
-.pied { flex: none; padding: 10px 16px 12px; font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--bord); }
+.pied { flex: none; padding: 10px 16px 12px; font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--bord-fort); background: rgba(8,8,10,.5); }
 
 /* Limites de l'abonnement (limites.js, 11/11/2026) : deux barres fines, couleur continue vert → rouge. */
 .limites { display: flex; flex-direction: column; gap: 9px; padding: 11px 16px 13px; }
@@ -107,21 +126,21 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 .limite[hidden], .limites-vide[hidden], .limite-temps[hidden] { display: none; }
 .limite { cursor: default; }
 .limite-tete { display: flex; align-items: baseline; gap: 6px; margin-bottom: 5px; }
-.limite-nom { color: var(--dim); font-weight: 600; font-size: 11.5px; }
+.limite-nom { color: var(--or); font-weight: 600; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
 .limite-pct { font-weight: 700; font-size: 12.5px; font-variant-numeric: tabular-nums; transition: color .6s ease; }
 .limite-remise { margin-left: auto; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-.limite-barre { position: relative; height: 6px; border-radius: 3px; background: var(--surface-3); overflow: visible; }
+.limite-barre { position: relative; height: 6px; border-radius: 3px; background: rgba(201,164,92,.14); overflow: visible; }
 .limite-rempli { height: 100%; width: 0; border-radius: 3px; transition: width .6s ease, background .6s ease; }
-.limite-temps { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; border-radius: 1px; background: rgba(236, 236, 241, .75); }
+.limite-temps { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; border-radius: 1px; background: rgba(239, 233, 221, .8); }
 
 /* Fermeture avec bilan en cours (08/11/2026) : la session descend en bas de la liste, estompée, avec un
    petit spinner rouge, le temps que Claude fasse sa fin de session. Seule animation en boucle de la barre, voulue par Eliot. */
 .item.e-fermeture { opacity: .62; cursor: default; animation: descendre .28s ease-out; }
 .item.e-fermeture:hover { background: transparent; }
-.e-fermeture .etat-texte { color: #F0757E; }
+.e-fermeture .etat-texte { color: var(--rouge); }
 .spinner {
   flex: none; width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%;
-  border: 1.6px solid rgba(240, 117, 126, .25); border-top-color: #F0757E;
+  border: 1.6px solid rgba(224, 122, 111, .25); border-top-color: var(--rouge);
   animation: tourner .8s linear infinite;
 }
 @keyframes tourner { to { transform: rotate(360deg); } }
@@ -130,4 +149,4 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 
 /* Conversation Telegram avec Jarvis (08/11/2026) : épinglée en haut, séparée des sessions par un filet. */
 .canal { flex: none; font-size: 11px; color: var(--faint); }
-.separateur-jarvis { height: 1px; margin: 6px 4px 6px; background: var(--bord); flex: none; }
+.separateur-jarvis { height: 1px; margin: 6px 4px 6px; background: linear-gradient(90deg, transparent, var(--bord-fort), transparent); flex: none; }

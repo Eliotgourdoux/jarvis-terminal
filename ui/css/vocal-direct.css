@@ -4,7 +4,7 @@
 .vd-fantome .vd-bulle {
   background: var(--surface);
   border-style: dashed;
-  border-color: #463A78;
+  border-color: var(--or-fonce);
   transition: border-color .25s ease-out, background-color .25s ease-out;
 }
 .vd-fantome.vd-fini .vd-bulle { border-style: solid; background: var(--surface-3); }
@@ -12,10 +12,10 @@
 /* Raccord : le fragment repris par la bulle fantôme quitte le fil sans attendre la coupe. */
 #fil > .vd-raccorde { display: none; }
 
-.vd-texte { position: relative; min-height: 1.55em; color: #F4F4F7; }
+.vd-texte { position: relative; min-height: 1.55em; color: var(--texte-fort); }
 .vd-attente { position: absolute; left: 0; top: 0; color: var(--faint); letter-spacing: .08em; }
 .vd-transcrit .vd-texte { color: var(--dim); transition: color .25s ease-out; }
-.vd-fini .vd-texte { color: #F4F4F7; }
+.vd-fini .vd-texte { color: var(--texte-fort); }
 
 .vd-meta { display: inline-flex; align-items: center; gap: 6px; }
 .vd-point { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; transition: background-color .2s ease-out, opacity .2s ease-out; }

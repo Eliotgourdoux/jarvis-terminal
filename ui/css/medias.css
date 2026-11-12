@@ -24,7 +24,7 @@
 .media-gif-jouer {
   position: absolute; left: 10px; bottom: 10px;
   padding: 5px 10px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--bord-fort); background: rgba(17,18,22,.88); color: var(--texte);
+  border: 1px solid var(--bord-fort); background: rgba(12,11,13,.88); color: var(--texte);
   font: 600 12px/1 var(--police);
 }
 .media-gif-jouer:hover { border-color: var(--accent); }

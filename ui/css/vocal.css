@@ -7,8 +7,8 @@
 .bouton-jarvis .icone-micro { color: var(--faint); transition: color .12s ease-out; }
 .bouton-jarvis:hover .icone-micro { color: var(--texte); }
 .jarvis-temoin { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--bord-fort); }
-.bouton-jarvis.vocal-actif { color: #fff; background: var(--accent-fond); border-color: #463A78; }
-.bouton-jarvis.vocal-actif:hover { background: #2C2650; }
+.bouton-jarvis.vocal-actif { color: var(--texte-fort); background: rgba(42,35,22,.88); border-color: var(--or); }
+.bouton-jarvis.vocal-actif:hover { background: rgba(52,43,26,.92); border-color: var(--or-clair); }
 .bouton-jarvis.vocal-actif .icone-micro { color: var(--accent); }
 .bouton-jarvis.vocal-actif .jarvis-temoin { background: var(--vert); }
 /* mains libres : le témoin dit ce que fait le micro (couleur fixe, aucune animation) */
@@ -27,19 +27,19 @@
 .barre-vocal-icone { display: inline-flex; color: var(--faint); }
 .barre-vocal .icone { width: 14px; height: 14px; }
 .barre-vocal.etat-parle { --c: var(--accent); }
-.barre-vocal.en-ligne { color: #fff; background: var(--accent-fond); border-color: var(--c); }
+.barre-vocal.en-ligne { color: var(--texte-fort); background: rgba(42,35,22,.88); border-color: var(--c); }
 .barre-vocal.en-ligne .barre-vocal-icone { color: var(--c); }
 .barre-vocal.etat-erreur { color: var(--ambre); }
 .barre-vocal.etat-erreur .barre-vocal-icone { color: var(--ambre); }
 
 .bulle-meta .icone-meta { width: 12px; height: 12px; margin-right: 5px; vertical-align: -2px; color: var(--accent); }
-.bulle.dictee { border-color: #463A78; }
+.bulle.dictee { border-color: var(--or-fonce); }
 
 .q-vocal { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 8px; font-size: 13px; color: var(--dim); }
 .q-vocal-icone { display: inline-flex; color: var(--accent); }
 .q-vocal .icone { width: 14px; height: 14px; }
 .q-vocal.en-ligne {
-  width: fit-content; max-width: 100%; box-sizing: border-box; padding: 3px 12px 3px 9px; border-radius: 6px; color: #fff;
+  width: fit-content; max-width: 100%; box-sizing: border-box; padding: 3px 12px 3px 9px; border-radius: 6px; color: var(--texte-fort);
   background: var(--accent-fond); border: 1px solid var(--accent);
 }
 .q-vocal-entendu { color: var(--ambre); }
