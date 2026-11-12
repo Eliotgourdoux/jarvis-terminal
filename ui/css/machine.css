@@ -1,0 +1,58 @@
+/* Marque de la machine (js/machine.js, victus/CONTRAT-VICTUS.md « Marque Ultron »).
+ * body.machine-victus : la même charte marbre, opaque, mais l’or de Jarvis devient la teinte froide d’Ultron (#9DB4C8, celle de la barre).
+ * Pas de néon, pas de verre, pas de lueur (mémoire design-opaque-lecture). Sans cette classe, rien ne change. */
+
+body.machine-victus {
+  --or: #9DB4C8;
+  --or-clair: #C4D4E2;
+  --or-fonce: #607486;
+  --accent: var(--or);
+  --accent-plein: #84A0B8;
+  --accent-fond: #1A1E24;
+  --lien: var(--or-clair);
+  --bord: rgba(157, 180, 200, .2);
+  --bord-fort: rgba(157, 180, 200, .4);
+  --filet: rgba(157, 180, 200, .55);
+  --degrade-or: linear-gradient(180deg, #C4D4E2, #84A0B8);
+  --cyan: var(--lien); --violet: var(--accent); --rose: var(--accent);
+}
+
+/* Encadré « Ultron » à côté du nom du projet. */
+.marque-machine { display: none; }
+body.machine-victus .marque-machine {
+  display: inline-flex; align-items: center; flex: none;
+  height: 20px; padding: 0 7px; box-sizing: border-box;
+  font: 600 10.5px/1 var(--police); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--or-clair); background: rgba(8, 8, 10, .72);
+  border: 1px solid var(--or); border-radius: 4px;
+  text-shadow: none; user-select: none; cursor: default;
+}
+
+/* Pas de vocal sur le Victus : ni bouton « Mode Jarvis », ni témoin. */
+body.machine-victus #bt-jarvis,
+body.machine-victus #barre-vocal { display: none !important; }
+
+/* Teintes écrites en dur dans app.css (or) : leur équivalent argent. */
+body.machine-victus ::selection { background: rgba(157, 180, 200, .36); }
+body.machine-victus .barre-bouton,
+body.machine-victus .barre-choix,
+body.machine-victus .bt-copier,
+body.machine-victus .bt-plus { border-color: rgba(157, 180, 200, .48); }
+body.machine-victus .barre-bouton .compte { background: rgba(157, 180, 200, .16); }
+body.machine-victus .barre-bouton.actif,
+body.machine-victus .q-option.choisie { background: rgba(26, 30, 36, .88); }
+body.machine-victus .saisie.depot { background: rgba(26, 30, 36, .92); }
+body.machine-victus .ligne-resume:hover { background-color: rgba(157, 180, 200, .07); }
+body.machine-victus .compaction-rail,
+body.machine-victus .dictee-rail { background: rgba(157, 180, 200, .14); }
+body.machine-victus .menu-item:hover,
+body.machine-victus .menu-item:focus-visible { background: rgba(157, 180, 200, .1); border-color: rgba(157, 180, 200, .3); }
+body.machine-victus .md .resume-final::before {
+  background: linear-gradient(90deg, rgba(157, 180, 200, .7), rgba(157, 180, 200, .25) 45%, transparent);
+}
+body.machine-victus .bulle { border-color: rgba(96, 116, 134, .6); }
+body.machine-victus .bulle .bt-plus { border-color: rgba(96, 116, 134, .55); }
+body.machine-victus .repere .bulle,
+body.machine-victus .question.repere,
+body.machine-victus .tour-claude.repere { animation-name: repere-argent; }
+@keyframes repere-argent { from { outline-color: rgba(157, 180, 200, .9); } to { outline-color: rgba(157, 180, 200, 0); } }
