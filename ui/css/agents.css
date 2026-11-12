@@ -42,3 +42,15 @@
 .agent-cible.mono { font-family: var(--police-code); font-size: 12px; }
 .agent-etapes li.agent-dit { display: block; color: var(--dim); font-style: italic; white-space: normal; padding-top: 3px; }
 .agent-etapes li.agent-vide { color: var(--faint); }
+
+/* Compact (12/11/2026) : la ligne prenait trop de place au-dessus de la saisie. */
+.agents { padding: 3px 4px; gap: 0; border-radius: 10px; max-height: 120px; }
+.agents-titre { padding: 3px 8px 1px; font-size: 9.5px; }
+.agent-tete { padding: 3px 8px; gap: 8px; grid-template-columns: 6px minmax(0, max-content) minmax(0, 1fr) auto; }
+.agent-point { width: 6px; height: 6px; }
+.agent-mission { font-size: 12.5px; max-width: 32ch; }
+.agent-action { font-size: 12px; }
+.agent-meta { font-size: 11px; }
+.agents.seul { flex-direction: row; align-items: center; }
+.agents.seul .agents-titre { flex: none; padding: 0 2px 0 8px; }
+.agents.seul .agent { flex: 1; min-width: 0; }

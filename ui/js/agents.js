@@ -118,7 +118,10 @@
     var actifs = ids.filter(function (id) { return !self.suivis[id].fini; }).length;
     var titre = this.bandeau.querySelector('.agents-titre');
     if (!titre) { titre = el('div', 'agents-titre'); this.bandeau.appendChild(titre); }
-    titre.textContent = actifs ? (actifs === 1 ? '1 agent au travail' : actifs + ' agents au travail') : 'Agents terminés';
+    // Un seul agent replié (12/11/2026, Eliot : « elle prend trop de place ») : titre et ligne sur une seule ligne.
+    var seul = ids.length === 1 && !this.suivis[ids[0]].ouvert;
+    this.bandeau.classList.toggle('seul', seul);
+    titre.textContent = seul ? 'Agent' : actifs ? (actifs === 1 ? '1 agent au travail' : actifs + ' agents au travail') : 'Agents terminés';
 
     var vus = {};
     ids.forEach(function (id) {
