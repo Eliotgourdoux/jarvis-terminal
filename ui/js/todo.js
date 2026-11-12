@@ -564,7 +564,7 @@
     b.addEventListener('click', basculer);
     var avant = $('bt-mes-messages'), barre = $('barre');
     if (avant && avant.parentNode) avant.parentNode.insertBefore(b, avant);
-    else if (barre) barre.insertBefore(b, $('bt-fermer') || null);
+    else if (barre) barre.insertBefore(b, document.querySelector('.barre-session'));
 
     // Panneau
     var pa = n.panneau = el('aside', 'todo-panneau');

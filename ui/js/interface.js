@@ -42,8 +42,19 @@
     this.selEffort.addEventListener('change', function () { ajusterLargeur(self.selEffort); s.changerEffort(self.selEffort.value); });
     this.selPermission.addEventListener('change', function () { ajusterLargeur(self.selPermission); s.changerPermission(self.selPermission.value); });
     // Terminal : deux boutons. Ouvrir un shell dans le dossier (Claude continue ici), ou passer la session au terminal.
-    $('bt-shell').addEventListener('click', function () { BT.pont.envoyer('ouvrirShell', {}); });
-    $('bt-terminal').addEventListener('click', function () { BT.pont.envoyer('ouvrirTerminal', {}); });
+    // Menu « ⋯ » (12/11/2026, Eliot ne comprenait pas les trois icônes) : terminal ici, continuer dans Terminal, fermer.
+    var btSession = $('bt-session'), menuSession = $('menu-session');
+    function menuOuvert(o) {
+      menuSession.hidden = !o;
+      btSession.classList.toggle('actif', o);
+      btSession.setAttribute('aria-expanded', String(o));
+    }
+    this._fermerMenuSession = function () { menuOuvert(false); };
+    btSession.addEventListener('click', function (e) { e.stopPropagation(); menuOuvert(menuSession.hidden); });
+    document.addEventListener('mousedown', function (e) { if (!menuSession.hidden && !e.target.closest('.barre-session')) menuOuvert(false); }, true);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menuSession.hidden) { e.stopPropagation(); menuOuvert(false); btSession.focus(); } }, true);
+    $('bt-shell').addEventListener('click', function () { menuOuvert(false); BT.pont.envoyer('ouvrirShell', {}); });
+    $('bt-terminal').addEventListener('click', function () { menuOuvert(false); BT.pont.envoyer('ouvrirTerminal', {}); });
 
     // Compacter (/compact) : deux clics, comme Fermer, pour qu'un clic égaré ne résume pas la conversation.
     var compacter = $('bt-compacter'), armeC = 0;
@@ -65,8 +76,8 @@
     fermer.addEventListener('click', function () {
       if (s.travaille && !arme) {
         fermer.classList.add('arme');
-        fermer.querySelector('.libelle').textContent = 'Claude travaille : confirmer';
-        arme = setTimeout(function () { arme = 0; fermer.classList.remove('arme'); fermer.querySelector('.libelle').textContent = 'Fermer'; }, 3500);
+        fermer.querySelector('.libelle').textContent = 'Claude travaille : cliquer encore pour fermer';
+        arme = setTimeout(function () { arme = 0; fermer.classList.remove('arme'); fermer.querySelector('.libelle').textContent = 'Fermer la session'; }, 3500);
         return;
       }
       clearTimeout(arme); arme = 0;
@@ -241,6 +252,7 @@
     this._initCommandes();   // avant le gestionnaire d'Entrée : le menu « / » passe en premier
     if (this._initDictee) this._initDictee();   // Espace maintenu : dictée (js/dictee.js)
     ta.addEventListener('input', ajuster);
+    this._initBrouillon();
     this._initHistoriqueSaisie();
     ta.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing && e.keyCode !== 229) {
@@ -604,6 +616,55 @@
     if (this.s.envoyerMessage(texte) && this.app.defilement) this.app.defilement.allerEnBas();
   };
 
+  /* Brouillon permanent (12/11/2026) : le texte en cours d'écriture est gardé par session dans localStorage
+   * (bt.brouillon.<id de session>) et revient après un rechargement ou une relance de l'app. Effacé à l'envoi. */
+  var PREFIXE_BROUILLON = 'bt.brouillon.';
+  Interface.prototype._cleBrouillon = function () {
+    var id = this.s.sessionId || (this.s.info && this.s.info.sessionId);
+    return id ? PREFIXE_BROUILLON + id : null;
+  };
+  Interface.prototype.sauverBrouillon = function () {
+    var cle = this._cleBrouillon();
+    if (!cle || this._reprise) return;
+    try {
+      var v = this._histoPos > -1 ? (this._histoBrouillon || '') : this.ta.value;
+      if (v.trim()) localStorage.setItem(cle, JSON.stringify({ texte: v, t: Date.now() }));
+      else localStorage.removeItem(cle);
+    } catch (e) { /* stockage indisponible */ }
+  };
+  Interface.prototype._restaurerBrouillon = function () {
+    var cle = this._cleBrouillon();
+    if (!cle || this._brouillonRestaure === cle) return;
+    this._brouillonRestaure = cle;
+    if (this.ta.value.trim()) return;   // déjà quelque chose d'écrit : on n'écrase pas
+    try {
+      var o = JSON.parse(localStorage.getItem(cle) || 'null');
+      if (o && o.texte) { this.ta.value = o.texte; this.ajusterSaisie(); }
+    } catch (e) { /* brouillon illisible : ignoré */ }
+  };
+  Interface.prototype._initBrouillon = function () {
+    var self = this, minuteur = 0;
+    this.ta.addEventListener('input', function () {
+      clearTimeout(minuteur);
+      minuteur = setTimeout(function () { self.sauverBrouillon(); }, 250);
+    });
+    window.addEventListener('pagehide', function () { self.sauverBrouillon(); });
+    window.addEventListener('beforeunload', function () { self.sauverBrouillon(); });
+    this.s.on('info', function () { self._restaurerBrouillon(); });
+    this._restaurerBrouillon();
+    // Ménage : brouillons de plus de 30 jours.
+    try {
+      var limite = Date.now() - 30 * 86400000;
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(PREFIXE_BROUILLON) === 0) {
+          var o = null; try { o = JSON.parse(localStorage.getItem(k)); } catch (e) { /* illisible */ }
+          if (!o || !o.t || o.t < limite) localStorage.removeItem(k);
+        }
+      }
+    } catch (e) { /* stockage indisponible */ }
+  };
+
   /* Envoi : si une question attend, le texte y répond (comme « préciser » dans Claude Code). */
   Interface.prototype.envoyer = function () {
     var texte = this.ta.value;
@@ -637,6 +698,7 @@
     this._histoBrouillon = '';
     this.ta.value = '';
     this.ajusterSaisie();
+    this.sauverBrouillon();
     if (this.app.defilement) this.app.defilement.allerEnBas();
   };
 

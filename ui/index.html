@@ -39,9 +39,15 @@
   <label class="barre-choix" title="Modèle de Claude"><span class="barre-choix-nom">Modèle</span><select id="choix-modele" aria-label="Modèle"></select></label>
   <label class="barre-choix" title="Effort de réflexion"><span class="barre-choix-nom">Effort</span><select id="choix-effort" aria-label="Effort"></select></label>
   <label id="choix-permission-boite" class="barre-choix" title="Ce que Claude peut faire sans te demander"><span class="barre-choix-nom">Permissions</span><select id="choix-permission" aria-label="Permissions"></select></label>
-  <button type="button" id="bt-shell" class="barre-bouton" title="Ouvrir un terminal dans le dossier du projet. Claude continue ici."><span class="libelle">Terminal</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4.5 6.5 6.8 8.5 4.5 10.5M8.5 10.5h3"/></svg></button>
-  <button type="button" id="bt-terminal" class="barre-bouton" title="Passer la session au terminal : Claude s’arrête ici et reprend la même conversation dans Terminal."><span class="libelle">Passer au terminal</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
-  <button type="button" id="bt-fermer" class="barre-bouton fermer" title="Arrêter Claude et fermer la fenêtre"><span class="libelle">Fermer</span><svg class="icone-court" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+  <div class="barre-session">
+    <button type="button" id="bt-session" class="barre-bouton" title="Terminal et fermeture de la session" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-session"><svg class="icone-points" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.2" cy="8" r="1.35"/><circle cx="8" cy="8" r="1.35"/><circle cx="12.8" cy="8" r="1.35"/></svg></button>
+    <div id="menu-session" class="menu-session" role="menu" hidden>
+      <button type="button" id="bt-shell" class="menu-item" role="menuitem"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4.5 6.5 6.8 8.5 4.5 10.5M8.5 10.5h3"/></svg><span class="menu-textes"><span class="libelle">Ouvrir un terminal ici</span><span class="menu-aide">Dans le dossier du projet. Claude continue dans l’app.</span></span></button>
+      <button type="button" id="bt-terminal" class="menu-item" role="menuitem"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg><span class="menu-textes"><span class="libelle">Continuer dans Terminal</span><span class="menu-aide">Claude quitte l’app et reprend la même conversation dans Terminal.</span></span></button>
+      <div class="menu-sep" role="separator"></div>
+      <button type="button" id="bt-fermer" class="menu-item fermer" role="menuitem"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><span class="menu-textes"><span class="libelle">Fermer la session</span><span class="menu-aide">Arrête Claude et ferme la fenêtre.</span></span></button>
+    </div>
+  </div>
 </header>
 
 <div id="mes-messages" class="popover" hidden>
