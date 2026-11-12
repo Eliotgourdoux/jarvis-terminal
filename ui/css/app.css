@@ -776,21 +776,49 @@ pre.sortie.consigne { color: var(--dim); font-family: var(--police); font-size: 
 .compaction.etat-echec .compaction-barre { background: var(--rouge-texte); }
 .compaction.etat-echec .compaction-titre { color: var(--rouge-texte); }
 
-/* ---- Dictée (Espace maintenu) ---- */
+/* ---- Dictée (Espace maintenu), calquée sur Claude Code 2.1.325 (18/11/2026, js/dictee.js) ---- */
+/* « .dictee » seul habille aussi les bulles dictées du fil (.bulle.dictee) : gardé tel quel. */
 .dictee { display: flex; align-items: center; gap: 9px; margin: -2px 0 8px; font: 12.5px var(--police); color: var(--dim); }
 .dictee[hidden] { display: none; }
-.dictee-point { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
-.dictee-texte { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dictee-rail { width: 90px; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; flex: none; }
-.dictee-niveau { display: block; width: 0; height: 100%; background: var(--accent); transition: width .07s linear; }
-.dictee-ecoute .dictee-texte { color: var(--texte); }
-.dictee-transcription .dictee-point { background: var(--faint); }
-.dictee-transcription .dictee-rail, .dictee-erreur .dictee-rail { display: none; }
-.dictee-erreur .dictee-point { background: var(--rouge-texte); }
-.dictee-erreur .dictee-texte { color: var(--rouge-texte); }
 
-/* Dictée en direct : le texte provisoire reste un peu estompé jusqu'à la transcription finale. */
-textarea.dictee-provisoire { color: var(--dim); }
+/* Pendant la dictée, le calque dessine le texte : celui du textarea devient transparent (il garde la vraie valeur). */
+.saisie textarea.dictee-active { color: transparent; caret-color: transparent; }
+.saisie textarea.dictee-active::placeholder { color: transparent; }
+.saisie textarea.dictee-active::selection { background: transparent; }
+.dictee-calque { position: absolute; z-index: 1; overflow: hidden; pointer-events: none; }
+.dictee-calque[hidden] { display: none; }
+.dictee-calque-page {
+  position: relative; box-sizing: border-box; margin: 0;
+  white-space: pre-wrap; overflow-wrap: break-word; word-wrap: break-word;
+  color: var(--texte);
+}
+.dictee-remplace { color: var(--faint); }
+/* Texte provisoire : estompé, comme la plage « interim » du terminal ; le texte final reprend la couleur normale. */
+.dictee-interim .dictee-mot { color: var(--dim); transition: color .32s ease-out; }
+.dictee-interim.final .dictee-mot { color: var(--texte); }
+/* Le curseur devient une barre de niveau (le « ▁▂▃▄▅▆▇█ » du terminal) : hauteur et teinte suivent la voix. */
+.dictee-curseur { position: absolute; left: 0; top: 0; width: 7px; height: 18px; }
+.dictee-curseur[hidden] { display: none; }
+.dictee-curseur-barre {
+  display: block; width: 100%; height: 100%; border-radius: 1.5px;
+  background: var(--faint); transform: scaleY(.125); transform-origin: 50% 100%;
+}
+
+/* Ligne d'état dans le pied de la saisie : « Je t’écoute… », « Transcription… », erreur. Hauteur fixe, aucun saut. */
+.dictee-etat { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--dim); white-space: nowrap; }
+.dictee-etat[hidden] { display: none; }
+.dictee-etat-texte { overflow: hidden; text-overflow: ellipsis; }
+.dictee-etat-aide { color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
+.dictee-etat-aide:empty { display: none; }
+.saisie.en-dictee .saisie-statut, .saisie.en-dictee .saisie-aide { display: none; }
+/* « Transcription… » respire lentement (période 2 s, gris → gris clair), comme « Voice: processing… ». */
+.dictee-etat.transcription .dictee-etat-texte { animation: dictee-pulsation 1s ease-in-out infinite alternate; }
+@keyframes dictee-pulsation { from { color: var(--faint); } to { color: var(--dim); } }
+.dictee-etat.erreur { color: var(--rouge-texte); white-space: normal; }
+@media (prefers-reduced-motion: reduce) {
+  .dictee-etat.transcription .dictee-etat-texte { animation: none; }
+  .dictee-interim .dictee-mot { transition: none; }
+}
 
 /* ---- Reprise depuis un message (Modifier) : bande dans la saisie, fil estompé après le point de reprise ---- */
 .saisie-reprise {
@@ -957,7 +985,7 @@ details.ligne:nth-child(3n+2) > .ligne-resume { --coupe: 15% 85%; }
 .md h2 { border-bottom-color: var(--bord-fort); }
 .md hr, .separateur::before, .separateur::after { background: linear-gradient(90deg, transparent, var(--bord-fort), transparent); }
 .separateur { font-family: var(--police-titre); color: var(--dim); }
-.compaction-rail, .dictee-rail { background: rgba(201,164,92,.14); }
+.compaction-rail { background: rgba(201,164,92,.14); }
 
 /* ---------- Menu « ⋯ » de la session : terminal ici, continuer dans Terminal, fermer (12/11/2026) ---------- */
 .barre-session { position: relative; flex: none; }
