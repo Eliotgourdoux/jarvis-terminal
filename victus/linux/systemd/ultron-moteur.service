@@ -1,0 +1,16 @@
+[Unit]
+Description=Ultron Terminal - moteur des sessions Claude Code du Victus
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/ultron-terminal/moteur/ultron_moteur.py
+Restart=on-failure
+RestartSec=2
+# Chaque session tourne dans son porteur : un redémarrage du démon (déploiement) ne tue pas les sessions.
+# Conséquence : `systemctl --user stop ultron-moteur` ne les arrête pas non plus (fermer les sessions depuis l'app).
+KillMode=process
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""ultron-terminal : commande d'Ultron Terminal sur le Victus.
+
+  ultron-terminal moteur                 démon au premier plan (ce que lance le service systemd)
+  ultron-terminal relais                 relie stdin/stdout au socket du démon (ssh -T victus ~/.local/bin/ultron-terminal relais)
+  ultron-terminal etat                   résumé lisible des sessions
+  ultron-terminal liste                  sessions en JSON
+  ultron-terminal dossiers               dossiers récents en JSON
+  ultron-terminal ouvrir <cwd> ["prompt"] [--modele m] [--effort e]   nouvelle session (affiche son id)
+  ultron-terminal envoyer <sessionId> "texte"                        envoie un message à une session
+  ultron-terminal app                    ouvre la fenêtre (depuis ssh : sur l'écran du Victus, sans attendre)
+
+Variables : ULTRON_SOCK (socket), ULTRON_ETAT (dossier d'état), comme le démon.
+"""
+import json
+import os
+import select
+import socket
+import subprocess
+import sys
+import time
+
+ICI = os.path.dirname(os.path.realpath(__file__))
+BASE = os.path.dirname(ICI)          # ~/.local/share/ultron-terminal (ou victus/linux dans le projet)
+MOTEUR = os.path.join(BASE, "moteur", "ultron_moteur.py")
+APP = os.path.join(BASE, "app", "ultron_app.py")
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+SOCK = os.environ.get("ULTRON_SOCK") or os.path.join(RUNTIME, "ultron-terminal.sock")
+
+
+def erreur(m, code=1):
+    print("ultron-terminal : " + m, file=sys.stderr)
+    sys.exit(code)
+
+
+def connecter(demarrer=True, attente=5.0):
+    """Socket du démon ; s'il ne répond pas, `systemctl --user start ultron-moteur` puis attente."""
+    def essai():
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            s.connect(SOCK)
+            return s
+        except OSError:
+            s.close()
+            return None
+
+    s = essai()
+    if s or not demarrer:
+        return s
+    if not os.environ.get("ULTRON_SOCK"):
+        subprocess.run(["systemctl", "--user", "start", "ultron-moteur"], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=15)
+    fin = time.monotonic() + attente
+    while time.monotonic() < fin:
+        s = essai()
+        if s:
+            return s
+        time.sleep(0.1)
+    return None
+
+
+class Conversation:
+    """Échange requête → réponse avec le démon (commandes etat, liste, ouvrir, envoyer…)."""
+
+    def __init__(self):
+        self.s = connecter()
+        if self.s is None:
+            erreur(f"le démon ne répond pas ({SOCK}) ; essayez `systemctl --user status ultron-moteur`")
+        self.f = self.s.makefile("rb")
+        self.envoyer({"op": "bonjour", "client": "cli", "version": 1})
+        self.attendre(lambda o: o.get("ev") == "bonjour")
+
+    def envoyer(self, o):
+        self.s.sendall(json.dumps(o, ensure_ascii=False).encode() + b"\n")
+
+    def attendre(self, cond, delai=15):
+        self.s.settimeout(delai)
+        while True:
+            try:
+                l = self.f.readline()
+            except socket.timeout:
+                erreur("le démon ne répond pas à temps")
+            if not l:
+                erreur("connexion fermée par le démon")
+            try:
+                o = json.loads(l)
+            except ValueError:
+                continue
+            if o.get("ev") == "erreur" and o.get("req") in (None, "r"):
+                erreur(o.get("message") or "erreur")
+            if cond(o):
+                return o
+
+
+def liste():
+    c = Conversation()
+    c.envoyer({"op": "abonner"})
+    return c.attendre(lambda o: o.get("ev") == "liste")["sessions"]
+
+
+def cmd_etat(args):
+    l = liste()
+    if not l:
+        print("Aucune session.")
+        return
+    for s in l:
+        age = time.time() - s["maj"] / 1000
+        quand = f"{int(age)} s" if age < 90 else f"{int(age / 60)} min" if age < 5400 else f"{int(age / 3600)} h"
+        marques = []
+        if s.get("enCours"):
+            marques.append("processus actif")
+        if s.get("dansTerminal"):
+            marques.append("dans un terminal")
+        if s.get("pages"):
+            marques.append(f"{s['pages']} page(s)")
+        print(f"{s.get('emoji') or ''} {s.get('projet')}  [{s['etat']}]  il y a {quand}"
+              f"  {s.get('modele') or 'modèle par défaut'}/{s.get('effort') or 'effort par défaut'}"
+              f"{'  · ' + ', '.join(marques) if marques else ''}")
+        print(f"   {s['id']}  {s['cwd']}")
+        txt = (s.get("resume") or s.get("dernierMessage") or "").strip().replace("\n", " ")
+        if txt:
+            print("   " + (txt[:160] + "…" if len(txt) > 160 else txt))
+
+
+def cmd_liste(args):
+    print(json.dumps(liste(), ensure_ascii=False, indent=1))
+
+
+def cmd_dossiers(args):
+    c = Conversation()
+    c.envoyer({"op": "dossiers", "req": "r"})
+    print(json.dumps(c.attendre(lambda o: o.get("ev") == "dossiers")["liste"], ensure_ascii=False, indent=1))
+
+
+def cmd_ouvrir(args):
+    modele = effort = None
+    reste = []
+    i = 0
+    while i < len(args):
+        if args[i] in ("--modele", "--model") and i + 1 < len(args):
+            modele = args[i + 1]
+            i += 2
+        elif args[i] == "--effort" and i + 1 < len(args):
+            effort = args[i + 1]
+            i += 2
+        else:
+            reste.append(args[i])
+            i += 1
+    if not reste:
+        erreur("usage : ultron-terminal ouvrir <dossier> [\"prompt\"] [--modele m] [--effort e]")
+    cwd = os.path.abspath(os.path.expanduser(reste[0]))
+    prompt = reste[1] if len(reste) > 1 else None
+    c = Conversation()
+    c.envoyer({"op": "ouvrir", "cwd": cwd, "resume": None, "prompt": prompt, "modele": modele, "effort": effort,
+               "req": "r"})
+    print(c.attendre(lambda o: o.get("ev") == "ouverte")["sessionId"])
+
+
+def cmd_envoyer(args):
+    if len(args) != 2:
+        erreur("usage : ultron-terminal envoyer <sessionId> \"texte\"")
+    c = Conversation()
+    c.envoyer({"op": "envoyer", "sessionId": args[0], "texte": args[1], "source": "jarvis", "req": "r"})
+    o = c.attendre(lambda o: o.get("ev") == "envoye")
+    if not o.get("ok"):
+        erreur("session arrêtée ou passée dans un terminal : message non envoyé")
+    print("ok")
+
+
+def cmd_relais(args):
+    """stdin → socket, socket → stdout, sans interpréter : le client parle le protocole du démon."""
+    s = connecter()
+    if s is None:
+        erreur(f"le démon ne répond pas ({SOCK})")
+    entree, sortie = sys.stdin.buffer.raw, sys.stdout.buffer.raw
+    os.set_blocking(s.fileno(), True)
+    entree_ouverte = True
+    while True:
+        lecteurs = [s] + ([entree] if entree_ouverte else [])
+        prets, _, _ = select.select(lecteurs, [], [])
+        if s in prets:
+            d = s.recv(1 << 20)
+            if not d:
+                return
+            vue = memoryview(d)
+            while vue:
+                try:
+                    n = sortie.write(vue)
+                except BrokenPipeError:
+                    return
+                vue = vue[n or 0:]
+        if entree_ouverte and entree in prets:
+            d = os.read(entree.fileno(), 1 << 20)
+            if not d:
+                entree_ouverte = False
+                try:
+                    s.shutdown(socket.SHUT_WR)
+                except OSError:
+                    return
+            else:
+                s.sendall(d)
+
+
+def cmd_moteur(args):
+    os.execv(sys.executable, [sys.executable, MOTEUR] + args)
+
+
+def cmd_app(args):
+    if not os.path.isfile(APP):
+        erreur(f"app absente ({APP})")
+    if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"):
+        os.execv(sys.executable, [sys.executable, APP] + args)
+    # depuis ssh : la fenêtre s'ouvre sur l'écran du Victus, dans la session graphique d'Eliot
+    try:
+        out = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except Exception as e:
+        erreur(f"environnement graphique introuvable ({e})")
+    env = {}
+    for l in out.splitlines():
+        if "=" in l:
+            k, v = l.split("=", 1)
+            env[k] = v
+    if not (env.get("WAYLAND_DISPLAY") or env.get("DISPLAY")):
+        erreur("aucune session graphique ouverte sur le Victus")
+    cmd = ["systemd-run", "--user", "--collect", "--quiet", "--unit", f"ultron-terminal-app-{int(time.time())}"]
+    for k in ("WAYLAND_DISPLAY", "DISPLAY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "XAUTHORITY",
+              "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP"):
+        if env.get(k):
+            cmd.append(f"--setenv={k}={env[k]}")
+    cmd += [sys.executable, APP] + args
+    r = subprocess.run(cmd)
+    sys.exit(r.returncode)
+
+
+COMMANDES = {"moteur": cmd_moteur, "relais": cmd_relais, "etat": cmd_etat, "liste": cmd_liste,
+             "dossiers": cmd_dossiers, "ouvrir": cmd_ouvrir, "envoyer": cmd_envoyer, "app": cmd_app}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDES:
+        print(__doc__.strip(), file=sys.stderr)
+        sys.exit(2)
+    try:
+        COMMANDES[sys.argv[1]](sys.argv[2:])
+    except KeyboardInterrupt:
+        sys.exit(130)
+
+
+if __name__ == "__main__":
+    main()
