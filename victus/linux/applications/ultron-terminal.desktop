@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Ultron Terminal
+GenericName=Sessions Claude Code
+Comment=Les sessions Claude Code du Victus, lisibles comme une conversation
+Exec=/home/eliotgrx/.local/bin/ultron-terminal app
+TryExec=/home/eliotgrx/.local/bin/ultron-terminal
+Icon=/home/eliotgrx/.local/share/ultron-terminal/applications/ultron-terminal.svg
+Terminal=false
+Categories=Development;
+Keywords=claude;ultron;terminal;sessions;
+StartupNotify=true
+StartupWMClass=fr.eliot.UltronTerminal
+SingleMainWindow=true
