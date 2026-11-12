@@ -344,7 +344,12 @@
     // Ligne de résumé ✅ (habitude d'Eliot : chaque réponse finit par elle)
     var ps = frag.querySelectorAll('p');
     for (var q = 0; q < ps.length; q++) {
-      if (/^\s*✅/.test(ps[q].textContent)) ps[q].classList.add('resume-final');
+      if (/^\s*✅/.test(ps[q].textContent)) {
+        ps[q].classList.add('resume-final');
+        // l'emoji vert jure avec le marbre : on l'ôte, la coche or vient du CSS
+        var w = document.createTreeWalker(ps[q], NodeFilter.SHOW_TEXT), t = w.nextNode();
+        if (t) t.nodeValue = t.nodeValue.replace(/^\s*✅\uFE0F?\s*/, '');
+      }
     }
   }
 })();
