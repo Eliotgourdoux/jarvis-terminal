@@ -20,7 +20,8 @@
     oga: ['audio/ogg; codecs="opus"', 'audio/ogg; codecs="vorbis"', 'audio/ogg'], opus: ['audio/ogg; codecs="opus"', 'audio/opus']
   };
   var EXT = Object.keys(GENRES).join('|').replace('jpg|jpeg', 'jpe?g');
-  var MAX = 12;  // lecteurs par message, au plus
+  var MAX = 12;  // lecteurs par message, au plus (photos à part : MAX_PHOTOS)
+  var MAX_PHOTOS = 80, PHOTOS_VISIBLES = 12;  // au-delà de 16 photos, le mur en montre 12 et la dernière porte « +N »
 
   // Un chemin commence en début de texte ou après une espace / ponctuation ouvrante, jamais au milieu d'une URL.
   var RE_TEXTE = new RegExp('(^|[\\s(\\[{"\'«:=])((?:file:\\/\\/(?:localhost)?)?(?:~\\/|\\/(?!\\/))(?:\\\\ |[^\\s"\'`<>|*?\\[\\](){}\\\\])*?\\.(?:' + EXT + '))' +
@@ -151,8 +152,9 @@
     document.body.appendChild(fond);
   }
 
-  function lecteurImage(boite, c) {
+  function lecteurImage(boite, c, surRatio) {
     var src = url(c);
+    function ratio(i) { if (surRatio && i.naturalWidth && i.naturalHeight) surRatio(i.naturalWidth / i.naturalHeight); }
     var cadre = el('div', 'media-cadre');
     var img = document.createElement('img');
     img.alt = nom(c);
@@ -160,7 +162,8 @@
     img.loading = 'lazy';
     img.title = 'Cliquer pour agrandir';
     img.addEventListener('error', function () { repli(boite, c, 'Image illisible ici'); });
-    img.addEventListener('click', function () { agrandir(src); });
+    img.addEventListener('load', function () { ratio(img); });
+    img.addEventListener('click', function () { if (boite._agrandir) boite._agrandir(); else agrandir(src); });
     if (extension(c) === 'gif') {
       // GIF : figé sur sa première image (pas d'animation en boucle) ; un clic l'anime.
       var toile = document.createElement('canvas');
@@ -169,6 +172,7 @@
       source.addEventListener('load', function () {
         toile.width = source.naturalWidth; toile.height = source.naturalHeight;
         try { toile.getContext('2d').drawImage(source, 0, 0); } catch (e) { /* toile vide : le bouton reste */ }
+        ratio(source);
       });
       source.addEventListener('error', function () { repli(boite, c, 'Image illisible ici'); });
       source.src = src;
@@ -224,7 +228,40 @@
    * Renvoie { rangs: [[indices]], hauteurs: [hauteur vidéo par rang], echelle: 1 }. */
   var PAR_RANG = { h: 2, v: 3 }, VERTICALE = 0.9;
 
-  function disposer(ratios, W, H, leg) {
+  /* Photos : galerie justifiée à la Flickr. L'ordre est gardé, horizontales et verticales se mêlent (même hauteur
+   * par rangée), et le découpage minimise l'écart à une hauteur cible : grande pour 1 ou 2 photos, ~220 px au-delà.
+   * La dernière rangée n'est pas étirée si elle est trop courte. */
+  function disposerPhotos(ratios, W, H) {
+    var n = ratios.length;
+    var cible = Math.min(H, n === 1 ? 460 : n === 2 ? 360 : n <= 4 ? 280 : n <= 8 ? 240 : 210);
+    var maxRang = Math.max(2, Math.min(6, Math.floor(W / 120)));
+    function haut(i, j) {   // hauteur de la rangée [i, j[ justifiée sur W
+      var somme = 0; for (var k = i; k < j; k++) somme += ratios[k];
+      return (W - ECART * (j - i - 1)) / somme;
+    }
+    var cout = [0], coupe = [0];
+    for (var j = 1; j <= n; j++) {
+      cout[j] = Infinity;
+      for (var i = Math.max(0, j - maxRang); i < j; i++) {
+        var h = haut(i, j), d = h - cible;
+        if (j === n && h > cible) d = 0;                    // dernière rangée : pas d'étirement, donc pas de pénalité
+        var c = cout[i] + d * d * (h > cible ? 1 : 1.6);   // trop basse = pire que trop haute
+        if (c < cout[j]) { cout[j] = c; coupe[j] = i; }
+      }
+    }
+    var rangs = [], hauteurs = [];
+    for (var f = n; f > 0; f = coupe[f]) {
+      var r = []; for (var k = coupe[f]; k < f; k++) r.push(k);
+      var h = haut(coupe[f], f);
+      rangs.unshift(r);
+      hauteurs.unshift(Math.min(h, f === n ? cible * 1.15 : Infinity, H));
+    }
+    return { rangs: rangs, hauteurs: hauteurs, echelle: 1 };
+  }
+
+  function disposer(ratios, W, H, leg, sorte) {
+    if (sorte === 'image') return disposerPhotos(ratios, W, H);
+    var par = PAR_RANG;
     var groupes = [], parSorte = {};
     ratios.forEach(function (r, i) {
       var sorte = r < VERTICALE ? 'v' : 'h';
@@ -233,7 +270,7 @@
     });
     var rangs = [], hauteurs = [];
     groupes.forEach(function (g) {
-      var d = disposerGroupe(g.map(function (i) { return ratios[i]; }), W, H, leg, ratios[g[0]] < VERTICALE ? PAR_RANG.v : PAR_RANG.h);
+      var d = disposerGroupe(g.map(function (i) { return ratios[i]; }), W, H, leg, ratios[g[0]] < VERTICALE ? par.v : par.h);
       d.rangs.forEach(function (r, k) {
         rangs.push(r.map(function (j) { return g[j]; }));
         hauteurs.push(d.hauteurs[k]);
@@ -295,6 +332,17 @@
     if (!W || !mur._cases) return;
     var cases = mur._cases.filter(function (b) { return !b.classList.contains('media-repli'); });
     var replis = mur._cases.filter(function (b) { return b.classList.contains('media-repli'); });
+    if (mur._sorte === 'image') {
+      var cachees = cases.length > 16 && !mur._toutes ? cases.length - PHOTOS_VISIBLES : 0;
+      cases.forEach(function (b, i) {
+        var plus = cachees && i === PHOTOS_VISIBLES - 1;
+        b.classList.toggle('photo-plus', !!plus);
+        if (plus) b.dataset.plus = '+' + (cachees + 1); else delete b.dataset.plus;
+      });
+      if (cachees) cases = cases.slice(0, PHOTOS_VISIBLES);
+      var vt = mur.querySelector('.mur-voir');
+      if (vt) { vt.hidden = !(cases.length > 16 || mur._cases.length > 16); vt.textContent = mur._toutes ? 'Réduire' : 'Tout afficher'; }
+    }
     mur.classList.toggle('mur-vide', !cases.length);
     mur.querySelectorAll('.mur-tailles button').forEach(function (b) {
       b.setAttribute('aria-pressed', String(b.dataset.taille === String(taille)));
@@ -303,9 +351,10 @@
     if (!cases.length) { mur.style.width = ''; mur.classList.remove('media-deborde'); grille.replaceChildren(); mur.querySelector('.mur-replis').replaceChildren.apply(mur.querySelector('.mur-replis'), replis); return; }
     var ratios = cases.map(function (b) {
       var v = b.querySelector('video');
-      return v && v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9;
+      if (v && v.videoWidth && v.videoHeight) return v.videoWidth / v.videoHeight;
+      return b._ratio || (mur._sorte === 'image' ? 4 / 3 : 16 / 9);
     });
-    var d = disposer(ratios, W, hauteurDispo(mur), cases.length > 1 ? LEGENDE : 0);
+    var d = disposer(ratios, W, hauteurDispo(mur), cases.length > 1 && mur._sorte !== 'image' ? LEGENDE : 0, mur._sorte);
     var cle = d.rangs.map(function (r) { return r.join(','); }).join('|') + '#' + cases.length;
     if (mur._cle !== cle) {   // ne déplacer les vidéos que si le découpage change (une vidéo en cours ne doit pas sauter)
       mur._cle = cle;
@@ -326,6 +375,8 @@
         cases[j].classList.toggle('case-etroite', h * ratios[j] < 170);   // trop étroite pour le nom : « Ouvrir » seul
         var v = cases[j].querySelector('video');
         if (v) v.style.height = h + 'px';
+        var cadre = cases[j].querySelector('.media-cadre');
+        if (cadre) cadre.style.height = h + 'px';
       });
     });
     // Le mur épouse ses vidéos (une vidéo verticale seule n'étire pas sa barre sur toute la colonne).
@@ -413,8 +464,113 @@
     return l;
   }
 
+  /* Photos (12/11/2026, Eliot : « magnifique pour les vidéos mais dégueulasse pour les photos ») : même mur justifié
+   * que les vidéos, 3 horizontales ou 4 verticales par rangée, et un clic ouvre la galerie (← → entre les photos). */
+  function murPhotos(chemins) {
+    var mur = el('div', 'media-mur mur-photos');
+    mur._sorte = 'image';
+    var grille = el('div', 'mur-grille');
+    mur._cases = chemins.map(function (c, i) {
+      var boite = el('div', 'media media-image');
+      boite.dataset.chemin = c;
+      lecteurImage(boite, c, function (r) { if (boite._ratio !== r) { boite._ratio = r; mur._cle = null; disposerMur(mur); } });
+      boite._agrandir = function () { galerie(mur, boite); };
+      boite.title = nom(c);
+      return boite;
+    });
+    // une image illisible passe en repli (lecteurImage) : on refait la mise en page
+    mur._cases.forEach(function (b) {
+      if (window.MutationObserver) new MutationObserver(function () { mur._cle = null; disposerMur(mur); }).observe(b, { attributes: true, attributeFilter: ['class'] });
+      grille.appendChild(b);
+    });
+    var barre = el('div', 'media-legende mur-barre');
+    if (chemins.length > 1) barre.appendChild(el('span', 'media-type', chemins.length + ' photos'));
+    else {
+      barre.appendChild(el('span', 'media-type', 'Photo'));
+      var n = el('span', 'media-nom', nom(chemins[0]));
+      n.title = chemins[0];
+      barre.appendChild(n);
+    }
+    if (chemins.length > 16) {
+      var voir = el('button', 'mur-voir', 'Tout afficher');
+      voir.type = 'button';
+      voir.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); mur._toutes = !mur._toutes; mur._cle = null; disposerMur(mur); });
+      barre.appendChild(voir);
+    }
+    barre.appendChild(boutonsTaille('Taille des photos'));
+    if (chemins.length === 1) barre.appendChild(boutonOuvrir(chemins[0]));
+    mur.appendChild(grille);
+    mur.appendChild(el('div', 'mur-replis'));
+    mur.appendChild(barre);
+    mur.appendChild(poignee(mur));
+    if (observateur) observateur.observe(mur);
+    return mur;
+  }
+
+  function boutonsTaille(aria) {
+    var tailles = el('div', 'mur-tailles');
+    tailles.setAttribute('role', 'group');
+    tailles.setAttribute('aria-label', aria);
+    TAILLES.forEach(function (t) {
+      var b = el('button', null, t[1]);
+      b.type = 'button';
+      b.dataset.taille = t[0];
+      b.title = { petit: 'Petit', colonne: 'Largeur de la colonne', grand: 'Largeur de la fenêtre' }[t[0]];
+      b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); choisirTaille(t[0]); });
+      tailles.appendChild(b);
+    });
+    return tailles;
+  }
+
+  /* Galerie plein écran : ← → (ou clic sur les flèches) entre les photos du mur, Échap ou clic sur le fond pour fermer. */
+  function galerie(mur, depart) {
+    var cases = mur._cases.filter(function (b) { return !b.classList.contains('media-repli'); });
+    var i = Math.max(0, cases.indexOf(depart));
+    var fond = el('div', 'galerie');
+    var img = document.createElement('img');
+    img.alt = '';
+    var compte = el('div', 'galerie-compte');
+    var legendeG = el('div', 'galerie-nom');
+    fond.appendChild(img);
+    function fleche(cls, txt, pas) {
+      var b = el('button', 'galerie-fleche ' + cls, txt);
+      b.type = 'button';
+      b.addEventListener('click', function (e) { e.stopPropagation(); aller(pas); });
+      return b;
+    }
+    if (cases.length > 1) { fond.appendChild(fleche('galerie-prec', '‹', -1)); fond.appendChild(fleche('galerie-suiv', '›', 1)); }
+    var bas = el('div', 'galerie-bas');
+    bas.appendChild(legendeG);
+    if (cases.length > 1) bas.appendChild(compte);
+    var ouvrirB = boutonOuvrir(cases[i].dataset.chemin);
+    bas.appendChild(ouvrirB);
+    fond.appendChild(bas);
+    function montrer() {
+      var c = cases[i].dataset.chemin;
+      img.src = url(c);
+      legendeG.textContent = nom(c);
+      legendeG.title = c;
+      compte.textContent = (i + 1) + ' / ' + cases.length;
+      var nb = boutonOuvrir(c); bas.replaceChild(nb, ouvrirB); ouvrirB = nb;
+    }
+    function aller(pas) { i = (i + pas + cases.length) % cases.length; montrer(); }
+    function fermer() { fond.remove(); document.removeEventListener('keydown', touche, true); }
+    function touche(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fermer(); }
+      else if (e.key === 'ArrowRight' && cases.length > 1) { e.preventDefault(); e.stopPropagation(); aller(1); }
+      else if (e.key === 'ArrowLeft' && cases.length > 1) { e.preventDefault(); e.stopPropagation(); aller(-1); }
+    }
+    img.addEventListener('click', function (e) { e.stopPropagation(); if (cases.length > 1) aller(1); });
+    bas.addEventListener('click', function (e) { e.stopPropagation(); });
+    fond.addEventListener('click', fermer);
+    document.addEventListener('keydown', touche, true);
+    montrer();
+    document.body.appendChild(fond);
+  }
+
   function murVideos(chemins) {
     var mur = el('div', 'media-mur');
+    mur._sorte = 'video';
     var grille = el('div', 'mur-grille');
     mur._cases = chemins.map(function (c) {
       var boite = el('div', 'media media-video');
@@ -439,18 +595,7 @@
       n.title = chemins[0];
       barre.appendChild(n);
     }
-    var tailles = el('div', 'mur-tailles');
-    tailles.setAttribute('role', 'group');
-    tailles.setAttribute('aria-label', 'Taille des vidéos');
-    TAILLES.forEach(function (t) {
-      var b = el('button', null, t[1]);
-      b.type = 'button';
-      b.dataset.taille = t[0];
-      b.title = { petit: 'Petit', colonne: 'Largeur de la colonne', grand: 'Largeur de la fenêtre' }[t[0]];
-      b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); choisirTaille(t[0]); });
-      tailles.appendChild(b);
-    });
-    barre.appendChild(tailles);
+    barre.appendChild(boutonsTaille('Taille des vidéos'));
     if (chemins.length > 1) {
       var tout = el('button', 'media-ouvrir mur-tout', 'Tout lire');
       tout.type = 'button';
@@ -473,14 +618,27 @@
    * Images et sons l'un sous l'autre ; toutes les vidéos ensemble dans un mur, à la place de la première. */
   function lecteurs(chemins) {
     var vus = Object.create(null), liste = [];
-    (chemins || []).forEach(function (c) { c = normaliser(c); if (c && !vus[c] && liste.length < MAX) { vus[c] = 1; liste.push(c); } });
+    var nAutres = 0, nPhotos = 0;
+    (chemins || []).forEach(function (c) {
+      c = normaliser(c);
+      if (!c || vus[c]) return;
+      var photo = genre(c) === 'image';
+      if (photo ? nPhotos >= MAX_PHOTOS : nAutres >= MAX) return;
+      if (photo) nPhotos++; else nAutres++;
+      vus[c] = 1; liste.push(c);
+    });
     if (!liste.length) return null;
     var box = el('div', 'medias');
     var videos = liste.filter(function (c) { return genre(c) === 'video'; }), murPose = false;
+    var photos = liste.filter(function (c) { return genre(c) === 'image'; }), photosPosees = false;
     liste.forEach(function (c) {
       var g = genre(c);
       if (g === 'video') {
         if (!murPose) { box.appendChild(murVideos(videos)); murPose = true; }
+        return;
+      }
+      if (g === 'image') {
+        if (!photosPosees) { box.appendChild(murPhotos(photos)); photosPosees = true; }
         return;
       }
       var boite = el('div', 'media media-' + g);

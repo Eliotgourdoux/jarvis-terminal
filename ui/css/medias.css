@@ -90,6 +90,51 @@
 .mur-barre .media-ouvrir { margin-left: 0; }
 .mur-barre > .mur-tailles + .media-ouvrir { margin-left: 0; }
 
+/* Mur de photos (12/11/2026) : mêmes rangées justifiées que les vidéos ; l'image remplit sa case (hauteur posée par medias.js). */
+.mur-rang > .media-image { flex: none; max-width: none; width: auto; }
+.mur-photos .media-cadre { overflow: hidden; }
+.mur-photos .media-cadre img, .mur-photos .media-gif-fige {
+  width: 100%; height: 100%; max-height: none; min-width: 0; min-height: 0; object-fit: cover;
+}
+.mur-photos .media-cadre img:hover { filter: brightness(1.06); }
+.mur-tire img { pointer-events: none; }
+.mur-photos .media-image { position: relative; border-radius: 8px; overflow: hidden; }
+.mur-photos .media-cadre { border-radius: 8px; }
+.photo-plus::after {
+  content: attr(data-plus); position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  background: rgba(8, 8, 10, .62); color: #fff; font: 600 30px/1 var(--police); letter-spacing: .02em;
+}
+.mur-voir {
+  margin-left: auto; padding: 3px 10px; border-radius: 7px; border: 1px solid var(--bord); background: transparent;
+  color: var(--dim); font: 600 12px var(--police); cursor: pointer;
+}
+.mur-voir:hover { color: var(--texte); border-color: var(--bord-fort); }
+.mur-voir + .mur-tailles { margin-left: 8px; }
+
+/* Galerie plein écran (clic sur une photo du mur). */
+.galerie {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 40px 72px 64px;
+  background: rgba(8, 8, 10, .94); cursor: zoom-out;
+}
+.galerie img { max-width: calc(100vw - 144px); max-height: calc(100vh - 112px); object-fit: contain; border-radius: 8px; cursor: pointer; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.galerie-fleche {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 64px; border-radius: 12px;
+  border: 1px solid var(--bord-fort); background: rgba(24, 25, 31, .85); color: var(--texte);
+  font: 300 34px/1 var(--police); cursor: pointer;
+}
+.galerie-fleche:hover { border-color: var(--accent); }
+.galerie-prec { left: 16px; }
+.galerie-suiv { right: 16px; }
+.galerie-bas {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 12px; padding: 7px 10px 7px 14px; cursor: default;
+  border: 1px solid var(--bord); border-radius: 10px; background: rgba(24, 25, 31, .9);
+  font-size: 12.5px; color: var(--faint);
+}
+.galerie-nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--police-code); font-size: 12px; }
+.galerie-compte { flex: none; color: var(--dim); font-weight: 600; font-variant-numeric: tabular-nums; }
+.galerie .media-ouvrir { margin-left: 0; }
+
 /* Poignée de redimensionnement : bord droit du mur, visible au survol. */
 .mur-poignee {
   position: absolute; top: 0; bottom: 0; right: -14px; width: 8px;
