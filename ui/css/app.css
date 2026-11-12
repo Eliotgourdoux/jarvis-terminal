@@ -178,7 +178,7 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
   position: fixed; left: 0; right: 0; bottom: 0;
   top: calc(var(--titre-h) + var(--hauteur-barre) + var(--hauteur-scene, 0px));
   overflow-y: auto; overflow-x: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;   /* pas de rebond élastique sous la dernière ligne (12/11/2026) */
   background: var(--fond);
 }
 .fil {
@@ -985,3 +985,8 @@ details.ligne:nth-child(3n+2) > .ligne-resume { --coupe: 15% 85%; }
 .menu-item.fermer:hover svg, .menu-item.fermer:hover .libelle { stroke: var(--rouge-texte); color: var(--rouge-texte); }
 .menu-item.fermer.arme { background: rgba(42,32,16,.85); border-color: rgba(232,176,75,.6); }
 .menu-item.fermer.arme .libelle { color: var(--ambre); }
+
+/* Reprendre ici (12/11/2026) : seul bouton vif quand la session est dans Terminal ou terminée. */
+.bouton-reprendre { color: var(--texte, #ECECF1); border-color: color-mix(in srgb, var(--lien) 55%, transparent); background: color-mix(in srgb, var(--lien) 16%, transparent); font-weight: 600; }
+.bouton-reprendre:hover:not(:disabled) { background: color-mix(in srgb, var(--lien) 26%, transparent); }
+.bouton-reprendre:disabled { opacity: .6; cursor: default; }

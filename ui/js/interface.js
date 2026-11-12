@@ -55,6 +55,15 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menuSession.hidden) { e.stopPropagation(); menuOuvert(false); btSession.focus(); } }, true);
     $('bt-shell').addEventListener('click', function () { menuOuvert(false); BT.pont.envoyer('ouvrirShell', {}); });
     $('bt-terminal').addEventListener('click', function () { menuOuvert(false); BT.pont.envoyer('ouvrirTerminal', {}); });
+    // Reprendre ici (12/11/2026) : la session partie dans Terminal (ou terminée) revient dans l'app.
+    function reprendre() {
+      menuOuvert(false);
+      $('bt-reprendre').disabled = true;
+      $('bt-reprendre').textContent = 'Reprise…';
+      BT.pont.envoyer('reprendreIci', {});
+    }
+    $('bt-reprendre').addEventListener('click', reprendre);
+    $('bt-reprendre-menu').addEventListener('click', reprendre);
 
     // Compacter (/compact) : deux clics, comme Fermer, pour qu'un clic égaré ne résume pas la conversation.
     var compacter = $('bt-compacter'), armeC = 0;
@@ -199,6 +208,11 @@
     $('barre-etat-texte').textContent = etat === 'termine' && this.s.dansTerminal ? 'Dans le Terminal' : (TEXTES_ETAT[etat] || etat);
     document.body.dataset.etat = etat;
     $('bt-arreter').hidden = etat !== 'travaille';
+    var fini = etat === 'termine';
+    $('bt-reprendre').hidden = !fini;
+    $('bt-reprendre').title = this.s.dansTerminal ? 'Arrête Claude dans Terminal et reprend la conversation ici' : 'Relance Claude sur cette conversation';
+    $('bt-reprendre-menu').hidden = !fini;
+    $('bt-terminal').hidden = fini;
     var bc = $('bt-compacter');
     bc.disabled = etat === 'travaille' || etat === 'termine';
     bc.title = etat === 'travaille' ? 'Compacter : possible quand Claude a fini' : 'Résumer la conversation pour libérer du contexte (/compact)';
@@ -224,7 +238,7 @@
       if (s.activite) t += ' · ' + s.activite;
       $('barre-etat-texte').textContent = 'Claude travaille';
     } else if (s.etat === 'attend') t = 'Claude attend ta réponse';
-    else if (s.etat === 'termine') t = s.dansTerminal ? 'La session continue dans le Terminal : cette fenêtre est en lecture seule.' : 'Session terminée : rouvre-la dans le terminal pour continuer.';
+    else if (s.etat === 'termine') t = s.dansTerminal ? 'La session continue dans le Terminal.' : 'Session terminée.';
     var st = $('saisie-statut');
     st.querySelector('.saisie-statut-texte').textContent = t;
     st.hidden = !t;
@@ -488,7 +502,7 @@
 
   Interface.prototype._majPlaceholder = function () {
     var s = this.s, q = s.questionsEnAttente()[0];
-    var p = BT.pont.natif ? 'Écris à Claude, ou maintiens Espace pour dicter…' : 'Écris à Claude…';
+    var p = BT.pont.natif && !document.body.classList.contains('machine-victus') ? 'Écris à Claude, ou maintiens Espace pour dicter…' : 'Écris à Claude…';
     if (s.etat === 'termine') p = s.dansTerminal ? 'La session est dans le Terminal.' : 'La session est terminée.';
     else if (q) p = q.type === 'permission' ? 'Écris ici pour refuser en expliquant quoi faire à la place…' : 'Réponds ci-dessus, ou écris ici ta réponse…';
     else if (s.etat === 'travaille') p = 'Écris un message : Claude le prendra en compte pendant son travail…';
