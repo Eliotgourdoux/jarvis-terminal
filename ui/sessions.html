@@ -46,6 +46,9 @@
 
 <p id="vide" class="vide" hidden>Aucune session ouverte.<br><button type="button" id="nouvelle-vide" class="lien">Ouvrir un projet</button></p>
 
+<!-- La machine en direct (15/11/2026, demande d'Eliot, « en mode btop ») : CPU, RAM, disque. Rempli par js/systeme.js. -->
+<footer class="pied systeme" id="systeme" aria-label="Machine"></footer>
+
 <!-- Limites de l'abonnement (11/11/2026, demande d'Eliot) : toujours visibles, à la place de l'aide des raccourcis. -->
 <footer class="pied limites" id="limites" title="⌘1 à ⌘9 · ⌃Tab pour passer d’une session à l’autre">
   <p class="limites-vide" id="limites-vide">Limites connues après la première réponse de Claude.</p>
@@ -53,5 +56,6 @@
 
 <script src="js/sessions.js"></script>
 <script src="js/limites.js"></script>
+<script src="js/systeme.js"></script>
 </body>
 </html>

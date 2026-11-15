@@ -40,6 +40,9 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     /// Sessions qui ont fini un tour pendant qu'Eliot regardait ailleurs.
     private var nonLues: Set<String> = []
     private var barrePrete = false
+    /// Relevé CPU / RAM / disque du pied de la barre (Systeme.swift), toutes les 3 s quand la fenêtre est visible.
+    private var minuterieSysteme: Timer?
+    private let fileSysteme = DispatchQueue(label: "local.eliot.betterterminal.systeme", qos: .utility)
     private var majPrevue = false
     private var dejaMontree = false
     /// La conversation Telegram avec Jarvis est affichée (alors `selection` vaut nil).
@@ -416,7 +419,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         }
         let victus = o["machine"] as? String == "victus"
         switch type {
-        case "pret": barrePrete = true; envoyerListe()
+        case "pret": barrePrete = true; envoyerListe(); demarrerSysteme()
         case "choisir":
             if let v = cible() { selectionner(v) }
             else if let id = idDemande, VictusLien.shared.session(id) != nil { VictusSession.montrer(id) }
@@ -462,6 +465,27 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
             decisionHandler(.allow); return
         }
         decisionHandler(.cancel)
+    }
+
+    // MARK: - Machine (pied de la barre)
+    private func demarrerSysteme() {
+        envoyerSysteme()
+        guard minuterieSysteme == nil else { return }
+        let t = Timer(timeInterval: 3, repeats: true) { [weak self] _ in self?.envoyerSysteme() }
+        t.tolerance = 1
+        RunLoop.main.add(t, forMode: .common)
+        minuterieSysteme = t
+    }
+
+    private func envoyerSysteme() {
+        guard barrePrete, window.isVisible, window.occlusionState.contains(.visible) || PiloteDev.actif else { return }
+        fileSysteme.async {
+            let r = Systeme.shared.releve()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.barrePrete, let barre = self.barre else { return }
+                barre.callAsyncJavaScript("if (window.systemeBarre) window.systemeBarre.maj(r);", arguments: ["r": r], in: nil, in: .page) { _ in }
+            }
+        }
     }
 
     func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { barrePrete = false }

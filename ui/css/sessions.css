@@ -228,3 +228,17 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 /* Ultron Terminal (app GTK du Victus) : barre.config({app:'ultron-terminal'}) — même barre, accent bleu acier. */
 html.app-ultron .tete-titre { color: var(--ultron); }
 html.app-ultron #discussion { display: none; }
+
+/* La machine en direct (systeme.js, 15/11/2026, « en mode btop ») : une ligne par mesure, nom · barre · valeur.
+   Même teinte continue vert → rouge que les limites ; dans la barre RAM, la part des sessions Claude en or. Aucune lueur. */
+.systeme { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; column-gap: 9px; row-gap: 7px; padding: 10px 16px 11px; }
+.systeme:empty { display: none; }
+.sys-nom { color: var(--or); font-weight: 600; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.sys-barre { position: relative; height: 4px; border-radius: 2px; background: rgba(201,164,92,.14); overflow: hidden; }
+.sys-rempli { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 2px; transition: width .6s ease, background-color .6s ease; }
+.sys-claude { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 2px 0 0 2px; background: var(--or-clair); transition: width .6s ease; }
+.sys-claude[hidden] { display: none; }
+.sys-val { min-width: 62px; text-align: right; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sys-val b { font-weight: 700; color: var(--texte); }
+.sys-val.alerte b { color: var(--rouge); }
+.systeme + .limites { border-top-color: var(--bord); }
