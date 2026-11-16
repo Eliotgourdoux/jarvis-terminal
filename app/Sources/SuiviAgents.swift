@@ -18,6 +18,8 @@ final class SuiviAgents {
         let s = suivis[sessionId] ?? SuiviAgents(session: session, cwd: cwd, sessionId: sessionId, pousser: pousser)
         suivis[sessionId] = s
         s.pousser = pousser
+        let lance = session.lanceA
+        file.async { s.lanceA = lance }
         s.definir(Set(ids))
         if ids.isEmpty { suivis[sessionId] = nil }
     }
@@ -34,6 +36,7 @@ final class SuiviAgents {
     private var finis = Set<String>()
     private var signales = Set<String>()        // fin déjà annoncée à la page
     private var minuteur: DispatchSourceTimer?
+    private var lanceA: Date?                   // lancement du processus claude de la session (Session.lanceA)
 
     private init(session: Session, cwd: String, sessionId: String, pousser: @escaping ([[String: Any]]) -> Void) {
         self.session = session
@@ -94,7 +97,7 @@ final class SuiviAgents {
             guard let d = fm.contents(atPath: p),
                   let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                   let id = o["toolUseId"] as? String, ids.contains(id) else { continue }
-            if (o["finished"] as? Bool) == true { finis.insert(id) }
+            if Self.termine(o) { finis.insert(id) }
             if fichiers[id] == nil {
                 fichiers[id] = dossier + "/" + nom.replacingOccurrences(of: ".meta.json", with: ".jsonl")
             }
@@ -142,7 +145,18 @@ final class SuiviAgents {
         let p = chemin.replacingOccurrences(of: ".jsonl", with: ".meta.json")
         if let d = FileManager.default.contents(atPath: p),
            let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-           (o["finished"] as? Bool) == true { finis.insert(id) }
+           Self.termine(o) { finis.insert(id) }
+        // Pas de drapeau de fin, mais transcript immobile depuis avant le lancement du processus actuel
+        // (app relancée, claude tué) : l'agent est mort avec l'ancien processus (16/11/2026).
+        if !finis.contains(id), let debut = lanceA, debut > .distantPast,
+           let m = (try? FileManager.default.attributesOfItem(atPath: chemin))?[.modificationDate] as? Date,
+           m < debut.addingTimeInterval(-5) { finis.insert(id) }
+    }
+
+    /// Fin d'un agent dans son meta.json : `finished`, ou arrêté (`stoppedByUser`, 16/11/2026 : deux agents
+    /// arrêtés la veille restaient « au travail » 7 h), ou tué / en échec si claude l'écrit un jour.
+    private static func termine(_ o: [String: Any]) -> Bool {
+        ["finished", "stoppedByUser", "killed", "failed", "stopped"].contains { (o[$0] as? Bool) == true }
     }
 
     /// Entrée d'outil allégée : chaînes coupées à 240 caractères, pas d'imbrication profonde.

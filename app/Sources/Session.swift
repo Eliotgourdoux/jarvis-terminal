@@ -27,6 +27,9 @@ final class Session {
     private var promptInitial: String?
 
     private var processus: ProcessusClaude?
+    /// Lancement du processus claude actuel : un sous-agent dont le transcript n'a plus bougé depuis
+    /// avant cette date ne peut pas tourner (les agents de fond meurent avec leur processus). Lu par SuiviAgents.
+    private(set) var lanceA = Date.distantPast
     private var fenetre: FenetreSession!
     private var pagePrete = false
     private var dejaPrete = false
@@ -335,6 +338,7 @@ final class Session {
                 DispatchQueue.main.async { if let p { self?.finProcessus(p, code) } }
             }
             self.processus = p
+            self.lanceA = Date()
             self.arretVoulu = nil
             self.oublierProcessus()
             p.ecouter()

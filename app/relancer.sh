@@ -20,6 +20,26 @@ if [[ -n "$T" ]]; then
   done
 fi
 
+# Jamais pendant qu'une autre session travaille (16/11/2026 : la relance a coupé une demande en cours
+# dans Stories Reels FR, restée ensuite 44 min à l'arrêt). On attend qu'elles soient toutes prêtes,
+# 30 min au plus ; au-delà, on abandonne la relance plutôt que de les interrompre.
+occupees() {
+  local f etat sid pid n=0
+  for f in ~/.config/better-terminal/sessions/*.json(N); do
+    etat=$(/usr/bin/plutil -extract etat raw -o - "$f" 2>/dev/null)
+    sid=$(/usr/bin/plutil -extract sessionId raw -o - "$f" 2>/dev/null)
+    pid=$(/usr/bin/plutil -extract pid raw -o - "$f" 2>/dev/null)
+    [[ "$etat" == travaille && "$sid" != "$1" ]] && kill -0 "$pid" 2>/dev/null && { echo "  occupée : $(/usr/bin/plutil -extract projet raw -o - "$f" 2>/dev/null)"; n=$((n+1)); }
+  done
+  return $(( n == 0 ))
+}
+for i in {1..360}; do
+  occupees "$1" >/tmp/jarvis-relance-occupees.txt || break
+  (( i == 1 )) && { echo "$(date '+%H:%M:%S') attente de sessions qui travaillent :"; cat /tmp/jarvis-relance-occupees.txt; }
+  (( i == 360 )) && { echo "$(date '+%H:%M:%S') sessions toujours au travail après 30 min : relance abandonnée"; exit 1; }
+  sleep 5
+done
+
 osascript -e "tell application id \"$ID\" to quit" || true
 for i in {1..30}; do pgrep -qf "Jarvis Terminal.app/Contents/MacOS" || break; sleep 0.5; done
 pgrep -qf "Jarvis Terminal.app/Contents/MacOS" && { echo "l'app ne s'est pas fermée, relance abandonnée"; exit 1; }
