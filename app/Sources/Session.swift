@@ -30,6 +30,12 @@ final class Session {
     /// Lancement du processus claude actuel : un sous-agent dont le transcript n'a plus bougé depuis
     /// avant cette date ne peut pas tourner (les agents de fond meurent avec leur processus). Lu par SuiviAgents.
     private(set) var lanceA = Date.distantPast
+    /// Discussions (16/11/2026, Eliot : « lisible dans l'app bureau et téléphone ») : titre généré par Claude après
+    /// le premier échange, et session publiée dans l'app Claude (Remote Control). Voir DiscussionClaude.swift.
+    var titre: String?
+    var titreDemande = false
+    var premierMessage: String?
+    var nomAffiche: String { titre ?? projet.nom }
     private var fenetre: FenetreSession!
     private var pagePrete = false
     private var dejaPrete = false
@@ -73,7 +79,7 @@ final class Session {
     var pid: Int32? { processus.flatMap { $0.fini ? nil : $0.pid } }
 
     var apercu: RegistreSessions.Apercu {
-        .init(sessionId: sessionId, cwd: cwd, projet: projet.nom, emoji: projet.emoji, etat: etat, resume: resume,
+        .init(sessionId: sessionId, cwd: cwd, projet: nomAffiche, emoji: projet.emoji, etat: etat, resume: resume,
               dernierMessage: dernierMessage, modele: modele, effort: effort, pid: pid, dansTerminal: dansTerminal, maj: maj)
     }
 
@@ -88,6 +94,7 @@ final class Session {
         fenetre = FenetreSession(session: self)
         RegistreSessions.shared.ajouter(self)
         journal("session \(sessionId) : ouverte dans \(cwd) (\(projet.emoji) \(projet.nom))\(repriseDemandee ? " [reprise]" : "")")
+        if repriseDemandee, estDiscussion { lireTitreExistant() }
         fenetre.montrer()
     }
 
@@ -274,7 +281,7 @@ final class Session {
     }
 
     private func info() -> [String: Any] {
-        ["cwd": cwd, "projet": projet.nom, "emoji": projet.emoji, "sessionId": sessionId,
+        ["cwd": cwd, "projet": nomAffiche, "emoji": projet.emoji, "sessionId": sessionId,
          "modele": modele ?? NSNull(), "effort": effort ?? NSNull(),
          "effortDefaut": EffortReglages.valeur(cwd: cwd) ?? NSNull(),
          "reprise": repriseDemandee, "dansTerminal": dansTerminal,
@@ -352,6 +359,7 @@ final class Session {
             if !enAttente.isEmpty { journal("session \(self.sessionId) : \(enAttente.count) ligne(s) gardée(s) avant le lancement → stdin") }
             self.ecrireEtat()
             RegistreSessions.shared.signaler(self)
+            self.publierDansClaude(p)
             lance?()
         }
     }
@@ -370,6 +378,7 @@ final class Session {
         var reponseId: String?    // control_response : request_id, succès, contenu
         var reponseSucces = false
         var reponseContenu: [String: Any]?
+        var titre: String?        // system session_title_changed
     }
 
     static func analyser(_ l: String) -> Analyse? {
@@ -383,6 +392,7 @@ final class Session {
             case "init": a.idInit = o["session_id"] as? String
             case "status": guard o["status"] as? String == "requesting" else { return nil }; a.activite = true
             case "session_state_changed": guard o["state"] as? String == "running" else { return nil }; a.activite = true
+            case "session_title_changed": guard let t = o["title"] as? String else { return nil }; a.titre = t
             default: return nil
             }
         case "assistant":
@@ -425,6 +435,7 @@ final class Session {
         if actuel, a == nil, l.hasPrefix("{\"type\":\"stream_event\"") { marquerTour(true) }
         guard let a else { return }
         if actuel { suivre(a, ligne: l) }
+        if estDiscussion { discussionLigne(a, de: p) }
         if let id = a.idInit, Validation.sessionId(id), id.lowercased() != sessionId {
             journal("session \(sessionId) : init annonce l'id \(id), adopté")
             supprimerEtat()
@@ -473,7 +484,14 @@ final class Session {
     /// et on retient l'initialize et les changements de mode pour pouvoir les redonner.
     private func noterEnvoi(_ o: [String: Any]) {
         switch o["type"] as? String {
-        case "user": marquerTour(true)
+        case "user":
+            marquerTour(true)
+            if premierMessage == nil, let m = o["message"] as? [String: Any] {
+                if let t = m["content"] as? String { premierMessage = t }
+                else if let c = m["content"] as? [[String: Any]] {
+                    premierMessage = c.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: "\n")
+                }
+            }
         case "control_response":
             if let r = o["response"] as? [String: Any], let id = r["request_id"] as? String {
                 demandesEnAttente.removeAll { $0.id == id }
@@ -521,6 +539,7 @@ final class Session {
         let direct = { [weak self] in
             guard let self, let l = ClaudeArgs.messageUtilisateur(texte) else { return }
             p.ecrire(l)
+            if self.premierMessage == nil { self.premierMessage = texte }
             self.marquerTour(true)
             journal("session \(self.sessionId) : → stdin (direct, \(source)) \(extrait(texte, 60))")
         }
@@ -534,7 +553,7 @@ final class Session {
 
     /// Pendant un rechargement (entre le déchargement et l'envoi de l'historique), les appels sont gardés pour la
     /// nouvelle page, sauf le flux de jetons (`stream_event`) : le transcript et les lignes `assistant` le remplacent.
-    private func pousser(_ fonction: String, _ argument: Any) {
+    func pousser(_ fonction: String, _ argument: Any) {
         if tamponRechargement != nil {
             if Session.estFlux(fonction, argument) { return }
             tamponRechargement!.append([fonction, argument])
@@ -840,9 +859,9 @@ final class Session {
 
     private var cheminEtat: String { DOSSIER_SESSIONS + "/" + sessionId + ".json" }
 
-    private func ecrireEtat() {
+    func ecrireEtat() {
         guard !fermee, !dansTerminal, Validation.sessionId(sessionId) else { return }
-        let o: [String: Any] = ["sessionId": sessionId, "cwd": cwd, "projet": projet.nom, "emoji": projet.emoji,
+        let o: [String: Any] = ["sessionId": sessionId, "cwd": cwd, "projet": nomAffiche, "emoji": projet.emoji,
                                 "pid": pid.map { NSNumber(value: $0) } ?? NSNull(), "etat": etat,
                                 "resume": resume ?? NSNull(), "maj": iso8601.string(from: maj)]
         if let d = json(o) { ecrireAtomique(d, cheminEtat) }
@@ -857,7 +876,7 @@ final class Session {
     private func notifierAttente() {
         if NSApp.isActive && fenetre.estDevant { journal("session \(sessionId) : attend (fenêtre au premier plan, pas de notification)"); return }
         if PiloteDev.actif { journal("session \(sessionId) : attend (mode pilote : notification non envoyée)"); return }
-        let titre = projet.emoji + " " + projet.nom
+        let titre = projet.emoji + " " + nomAffiche
         var message = resume?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if message.isEmpty { message = "Claude attend votre réponse." }
         while message.hasPrefix("-") || message.hasPrefix("[") { message.removeFirst() }   // lu comme option sinon

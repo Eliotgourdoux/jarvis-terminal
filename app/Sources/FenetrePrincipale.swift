@@ -339,7 +339,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
             return
         }
         guard let s = selection?.sessionLiee else { window.title = "Jarvis Terminal"; return }
-        window.title = s.projet.emoji + " " + s.projet.nom + (s.apercu.dansTerminal ? " — dans le Terminal" : "")
+        window.title = s.projet.emoji + " " + s.nomAffiche + (s.apercu.dansTerminal ? " — dans le Terminal" : "")
     }
 
     private func envoyerListe() {

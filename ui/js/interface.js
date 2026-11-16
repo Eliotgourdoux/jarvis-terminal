@@ -121,6 +121,13 @@
     return String(p || '').replace(/^\/Users\/[^/]+/, '~');
   }
 
+  /* Titre d'une discussion arrivé en cours de route : seulement le nom affiché (16/11/2026). */
+  Interface.prototype._majNom = function (nom) {
+    $('barre-nom').textContent = nom;
+    var emoji = $('barre-emoji').textContent;
+    document.title = (emoji ? emoji + ' ' : '') + nom;
+  };
+
   Interface.prototype._majInfo = function (info) {
     info = info || this.s.etatInfo();
     var nom = info.projet || BT.basename(info.cwd) || 'Claude';

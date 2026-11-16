@@ -86,6 +86,7 @@
     dictee: function (d) { if (app.interface.recevoirDictee) app.interface.recevoirDictee(d); },
     todo: function (d) { if (BT.todo) BT.todo.recevoir(d); },
     agents: function (l) { if (app.agents) app.agents.recevoir(l); },
+    titre: function (t) { if (typeof t === 'string' && t) { session.info.projet = t; app.interface._majNom(t); } },
     vocalDirect: function (d) { if (app.vocalDirect) app.vocalDirect.recevoir(d); },
     vocalEtape: function (d) { if (BT.apercuEtape) BT.apercuEtape(d); },
     transcription: function (d) {
