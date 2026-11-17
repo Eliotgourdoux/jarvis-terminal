@@ -77,7 +77,7 @@ enum QuitterMaintenu {
         sousTitre?.stringValue = enCours == 0 ? "Tes sessions se rouvriront au prochain lancement."
             : enCours == 1 ? "1 session travaille : elle sera interrompue."
             : "\(enCours) sessions travaillent : elles seront interrompues."
-        sousTitre?.textColor = enCours == 0 ? NSColor(cgColor: couleur(0x9A9DAB)) : NSColor(cgColor: couleur(0xF2B252))
+        sousTitre?.textColor = enCours == 0 ? NSColor(cgColor: couleur(0xB9B1A3)) : NSColor(cgColor: couleur(0xE8B04B))
         CATransaction.begin(); CATransaction.setDisableActions(true)
         barre?.frame.size.width = 0
         CATransaction.commit()
@@ -101,15 +101,17 @@ enum QuitterMaintenu {
 
         let fond = NSView(frame: NSRect(origin: .zero, size: taille))
         fond.wantsLayer = true
-        fond.layer?.backgroundColor = couleur(0x1B1D24)
+        fond.layer?.backgroundColor = couleur(0x141216)   // charte marbre : --surface
         fond.layer?.cornerRadius = 14
         fond.layer?.borderWidth = 1
-        fond.layer?.borderColor = couleur(0x343846)
+        fond.layer?.borderColor = CGColor(srgbRed: 201 / 255, green: 164 / 255, blue: 92 / 255, alpha: 0.4)   // --bord-fort (filet or)
         p.contentView = fond
 
         let titre = NSTextField(labelWithString: "Maintiens ⌘Q pour quitter")
-        titre.font = .systemFont(ofSize: 16, weight: .semibold)
-        titre.textColor = NSColor(cgColor: couleur(0xECEDF2))
+        // titres en serif (New York), comme la page
+        let base = NSFont.systemFont(ofSize: 17, weight: .semibold)
+        titre.font = base.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: 17) } ?? base
+        titre.textColor = NSColor(cgColor: couleur(0xFAF5EA))
         titre.alignment = .center
         titre.frame = NSRect(x: 16, y: 62, width: taille.width - 32, height: 22)
         fond.addSubview(titre)
@@ -125,13 +127,16 @@ enum QuitterMaintenu {
         let rail = CALayer()
         rail.frame = CGRect(x: 24, y: 18, width: taille.width - 48, height: 4)
         rail.cornerRadius = 2
-        rail.backgroundColor = couleur(0x282B35)
+        rail.backgroundColor = couleur(0x262126)   // --surface-3
         rail.masksToBounds = true
         fond.layer?.addSublayer(rail)
-        let plein = CALayer()
+        // barre en dégradé or (--or-clair → --accent-plein), à la place de l'ancien violet néon
+        let plein = CAGradientLayer()
         plein.anchorPoint = .zero
         plein.frame = CGRect(x: 0, y: 0, width: 0, height: 4)
-        plein.backgroundColor = couleur(0x9D84FF)
+        plein.colors = [couleur(0xE3C887), couleur(0xB8914A)]
+        plein.startPoint = CGPoint(x: 0, y: 0.5)
+        plein.endPoint = CGPoint(x: 1, y: 0.5)
         rail.addSublayer(plein)
         barre = plein
 
