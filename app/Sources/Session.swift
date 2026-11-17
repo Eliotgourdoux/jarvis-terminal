@@ -23,6 +23,8 @@ final class Session {
     private(set) var dernierMessage: String?
     private(set) var dansTerminal = false
     private(set) var maj = Date()
+    /// Agents de fond encore en cours (liste de la page) : la relance de l'app les tuerait, relancer.sh attend qu'ils finissent.
+    private(set) var agentsEnCours = 0
     private let repriseDemandee: Bool
     private var promptInitial: String?
 
@@ -81,7 +83,8 @@ final class Session {
 
     var apercu: RegistreSessions.Apercu {
         .init(sessionId: sessionId, cwd: cwd, projet: nomAffiche, emoji: projet.emoji, etat: etat, resume: resume,
-              dernierMessage: dernierMessage, modele: modele, effort: effort, pid: pid, dansTerminal: dansTerminal, maj: maj)
+              dernierMessage: dernierMessage, modele: modele, effort: effort, pid: pid, dansTerminal: dansTerminal, maj: maj,
+              agents: agentsEnCours)
     }
 
     init(_ d: DemandeSession) {
@@ -96,6 +99,7 @@ final class Session {
         RegistreSessions.shared.ajouter(self)
         journal("session \(sessionId) : ouverte dans \(cwd) (\(projet.emoji) \(projet.nom))\(repriseDemandee ? " [reprise]" : "")")
         if repriseDemandee, estDiscussion { lireTitreExistant() }
+        if repriseDemandee { restaurerApercu() }
         fenetre.montrer()
     }
 
@@ -115,18 +119,14 @@ final class Session {
             guard let l = o["ligne"] as? String, l.utf8.count <= 20_000_000, !l.contains("\n"), !l.contains("\r"),
                   let d = l.data(using: .utf8), let objet = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
             else { refuser("versClaude : ligne invalide"); return }
-            if let p = processus, !p.fini, arretVoulu == nil {
-                p.ecrire(l)
-                noterEnvoi(objet)
-                journal("session \(sessionId) : → stdin \(l.utf8.count) o \(typeDe(l))")
-            } else if !fermee, !dansTerminal, processus == nil || arretVoulu == "relance" {
-                // claude pas encore lancé (environnement, lecture du transcript) ou en cours de relance :
-                // la ligne est gardée et écrite dès que le processus est lancé (rien n'est perdu).
-                avantLancement.append(l)
-                journal("session \(sessionId) : en attente du lancement \(l.utf8.count) o \(typeDe(l))")
-            } else {
-                journal("session \(sessionId) : refusé — versClaude alors que le processus est arrêté")
-                pousser("stderr", "Le processus claude est arrêté : message non envoyé.\n")
+            // limite d'usage atteinte : le message d'Eliot attend la reprise (LimiteUsage.swift)
+            if objet["type"] as? String == "user", LimiteUsage.shared.garder(self, ligne: l, objet: objet) { return }
+            versStdin(l, objet)
+        case "limite":
+            switch o["action"] as? String {
+            case "envoyer": LimiteUsage.shared.envoyerMaintenant(self)
+            case "vider": LimiteUsage.shared.vider(self)
+            default: refuser("limite : action invalide")
             }
         case "relancer":
             var m = modele, e = effort
@@ -202,6 +202,7 @@ final class Session {
             TodoProjet.traiter(o, cwd: cwd) { [weak self] r in self?.pousser("todo", r) }
         case "agents":   // sous-agents en cours : suivi en direct de leurs transcripts (SuiviAgents.swift)
             let ids = (o["ids"] as? [String] ?? []).filter { !$0.isEmpty }
+            if ids.count != agentsEnCours { agentsEnCours = ids.count; ecrireEtat(); RegistreSessions.shared.signaler(self) }
             SuiviAgents.suivre(ids, session: self, cwd: cwd, sessionId: sessionId) { [weak self] r in self?.pousser("agents", r) }
         case "modeVocal":
             guard let a = o["actif"] as? Bool else { refuser("modeVocal : actif invalide"); return }
@@ -248,7 +249,11 @@ final class Session {
             dernierVocalEtat = nil
             envoyerVocalEtat(MoteurVocal.shared.etatPage(pour: self))
             dejaPrete = true
-            if repriseDemandee { envoyerHistorique { [weak self] in self?.demarrer() } } else { demarrer() }
+            if repriseDemandee { envoyerHistorique { [weak self] in self?.demarrer() } }
+            else {
+                if LimiteUsage.shared.active { pousserDirect("limite", LimiteUsage.shared.etatPage(self)) }
+                demarrer()
+            }
         } else {
             // ⌘R ou page rechargée : la conversation est reconstruite depuis le transcript (écrit au fil de l'eau).
             // Le processus, lui, n'a rien vu : `info.direct` dit à la page où il en est (tour en cours, questions),
@@ -274,6 +279,7 @@ final class Session {
                 self.tamponRechargement = nil
                 if !gardes.isEmpty { journal("session \(self.sessionId) : \(gardes.count) appel(s) gardé(s) pendant le rechargement → page") }
                 gardes.forEach { self.pousserDirect($0[0] as! String, $0[1]) }
+                if gardes.contains(where: { $0[0] as? String == "limite" }) { self.pousserDirect("limite", LimiteUsage.shared.etatPage(self)) }
                 let finGardee = gardes.contains { $0[0] as? String == "fin" }
                 if self.dansTerminal { if !finGardee { self.pousser("fin", ["code": 0, "raison": "terminal"]) } }
                 else if self.demarre, !finGardee, self.processus == nil || self.processus!.fini { self.pousser("fin", ["code": 0]) }
@@ -300,7 +306,11 @@ final class Session {
                 guard let self, !self.fermee else { return }
                 journal("session \(id) : historique \(lignes.count) lignes")
                 // page repartie entre-temps (second ⌘R) : son propre `pret` renverra l'historique
-                if gen == self.generationPage { self.pousserDirect("historique", lignes) }
+                if gen == self.generationPage {
+                    self.pousserDirect("historique", lignes)
+                    // messages gardés par la limite d'usage : pas dans le transcript, la page les remet après l'historique
+                    if LimiteUsage.shared.active { self.pousserDirect("limite", LimiteUsage.shared.etatPage(self)) }
+                }
                 ensuite()
             }
         }
@@ -380,6 +390,23 @@ final class Session {
         var reponseSucces = false
         var reponseContenu: [String: Any]?
         var titre: String?        // system session_title_changed
+        var erreur = false        // result : is_error
+        var limiteStatut: String? // rate_limit_event (ou refus) : allowed, allowed_warning, rejected
+        var limiteReset: Double?  // secondes Unix
+        var limiteType: String?   // five_hour, seven_day, ou la limite d'un seul modèle
+        var limiteSurcout = false // l'usage supplémentaire payant couvre le dépassement : rien n'est coupé
+        var refusLimite = false   // assistant : erreur usage_limit_reached (le tour est refusé par la limite)
+        var principal = false     // assistant du fil principal (pas un sous-agent)
+        var synthetique = false   // assistant fabriqué par Claude Code (erreur d'API, commande locale) : pas une réponse
+        var requete = false       // system status requesting : une requête part vers l'API
+    }
+
+    /// Champs utiles d'un `rate_limit_info` (relevé ou refus).
+    private static func lireLimite(_ r: [String: Any], dans a: inout Analyse) {
+        a.limiteStatut = r["status"] as? String
+        a.limiteReset = (r["resetsAt"] as? NSNumber)?.doubleValue
+        a.limiteType = r["rateLimitType"] as? String
+        a.limiteSurcout = (r["isUsingOverage"] as? Bool) ?? false
     }
 
     static func analyser(_ l: String) -> Analyse? {
@@ -391,7 +418,7 @@ final class Session {
         case "system":
             switch o["subtype"] as? String {
             case "init": a.idInit = o["session_id"] as? String
-            case "status": guard o["status"] as? String == "requesting" else { return nil }; a.activite = true
+            case "status": guard o["status"] as? String == "requesting" else { return nil }; a.activite = true; a.requete = true
             case "session_state_changed": guard o["state"] as? String == "running" else { return nil }; a.activite = true
             case "session_title_changed": guard let t = o["title"] as? String else { return nil }; a.titre = t
             default: return nil
@@ -400,11 +427,26 @@ final class Session {
             a.activite = true
             guard o["parent_tool_use_id"] == nil || o["parent_tool_use_id"] is NSNull,
                   let m = o["message"] as? [String: Any], let c = m["content"] as? [[String: Any]] else { return a }
+            a.principal = true
+            // Erreur d'API emballée par Claude Code (champs lus dans le binaire 2.1.325) : `api_error` vaut
+            // usage_limit_reached quand la limite de l'abonnement a refusé la requête, avec le relevé du refus.
+            let apiErreur = (o["api_error"] as? String) ?? (m["api_error"] as? String)
+            a.synthetique = (m["model"] as? String) == "<synthetic>" || (o["is_api_error_message"] as? Bool) == true
+                || (m["is_api_error_message"] as? Bool) == true || apiErreur != nil
+            if apiErreur == "usage_limit_reached" {
+                a.refusLimite = true
+                let p = (o["api_error_params"] as? [String: Any]) ?? (m["api_error_params"] as? [String: Any])
+                if let r = p?["rate_limit_info"] as? [String: Any] { lireLimite(r, dans: &a) }
+            }
             let textes = c.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
             if !textes.isEmpty { a.texte = sansANSI(textes.joined(separator: "\n")) }
         case "result":
             a.finTour = true
+            a.erreur = (o["is_error"] as? Bool) ?? false
             if let r = o["result"] as? String { a.resultat = sansANSI(r) }
+        case "rate_limit_event":
+            guard let r = o["rate_limit_info"] as? [String: Any], r["status"] is String else { return nil }
+            lireLimite(r, dans: &a)
         case "control_request":
             guard let r = o["request"] as? [String: Any], r["subtype"] as? String == "can_use_tool",
                   let id = o["request_id"] as? String else { return nil }
@@ -435,7 +477,9 @@ final class Session {
         let actuel = p === processus   // suivi du processus courant seulement (pas d'un ancien qui s'arrête)
         if actuel, a == nil, l.hasPrefix("{\"type\":\"stream_event\"") { marquerTour(true) }
         guard let a else { return }
+        let debut = debutTour
         if actuel { suivre(a, ligne: l) }
+        if actuel, !fermee { suivreLimite(a, debutTour: debut) }
         if estDiscussion { discussionLigne(a, de: p) }
         if let id = a.idInit, Validation.sessionId(id), id.lowercased() != sessionId {
             journal("session \(sessionId) : init annonce l'id \(id), adopté")
@@ -472,6 +516,80 @@ final class Session {
             if let m = modesDemandes.removeValue(forKey: id), a.reponseSucces, reponseInitialize != nil {
                 reponseInitialize?["current_permission_mode"] = (a.reponseContenu?["mode"] as? String) ?? m
             }
+        }
+    }
+
+    /// Écrit une ligne sur stdin, ou la garde si claude n'est pas encore lancé.
+    private func versStdin(_ l: String, _ objet: [String: Any]) {
+        if let p = processus, !p.fini, arretVoulu == nil {
+            p.ecrire(l)
+            noterEnvoi(objet)
+            journal("session \(sessionId) : → stdin \(l.utf8.count) o \(typeDe(l))")
+        } else if !fermee, !dansTerminal, processus == nil || arretVoulu == "relance" {
+            // claude pas encore lancé (environnement, lecture du transcript) ou en cours de relance :
+            // la ligne est gardée et écrite dès que le processus est lancé (rien n'est perdu).
+            avantLancement.append(l)
+            journal("session \(sessionId) : en attente du lancement \(l.utf8.count) o \(typeDe(l))")
+        } else {
+            journal("session \(sessionId) : refusé — versClaude alors que le processus est arrêté")
+            pousser("stderr", "Le processus claude est arrêté : message non envoyé.\n")
+        }
+    }
+
+    // MARK: - File « limite » (LimiteUsage.swift)
+
+    func pousserLimite(_ e: [String: Any]) { pousser("limite", e) }
+
+    /// claude peut recevoir une ligne maintenant, ou la recevra à son lancement (pas : Terminal, session terminée).
+    var peutRecevoir: Bool {
+        guard !fermee, !dansTerminal else { return false }
+        if let p = processus { return (!p.fini && arretVoulu == nil) || arretVoulu == "relance" }
+        return true
+    }
+
+    /// La page a reçu son historique : une bulle poussée maintenant s'affichera.
+    var pretePourLimite: Bool { pagePrete && demarre }
+
+    /// À la reprise : écrit une ligne gardée (sa bulle est déjà dans la page) ou le message « Reprends »
+    /// (`montrer` : la page l'affiche sans le renvoyer).
+    func ecrireDepuisLimite(_ ligne: String?, montrer: Bool) {
+        guard let l = ligne, peutRecevoir,
+              let objet = (try? JSONSerialization.jsonObject(with: Data(l.utf8))) as? [String: Any] else { return }
+        if montrer { pousser("utilisateurAilleurs", ["ligne": l, "source": "limite"]) }
+        versStdin(l, objet)
+    }
+
+    /// Relevé « rejected » vu pendant ce tour, pas encore confirmé (un sous-agent a pu être refusé seul, ou
+    /// l'usage supplémentaire a pris le relais).
+    private var refusEnAttente: (reset: Double?, type: String?)?
+    private var derniereRequete: Date?
+
+    /// Lit dans les lignes de Claude ce qui concerne la limite d'usage.
+    /// Refus confirmé : message d'erreur usage_limit_reached, ou relevé « rejected » suivi d'un message fabriqué
+    /// ou d'un tour en erreur. Une vraie réponse du fil principal annule un refus non confirmé et prouve que
+    /// l'abonnement répond.
+    private func suivreLimite(_ a: Analyse, debutTour: Date?) {
+        if a.requete { derniereRequete = Date() }
+        if a.principal {
+            if a.refusLimite {
+                LimiteUsage.shared.refus(self, resetsAt: a.limiteReset ?? refusEnAttente?.reset, type: a.limiteType ?? refusEnAttente?.type)
+                refusEnAttente = nil
+            } else if a.synthetique {
+                if let r = refusEnAttente { refusEnAttente = nil; LimiteUsage.shared.refus(self, resetsAt: r.reset, type: r.type) }
+            } else {
+                refusEnAttente = nil
+                let d = [debutTour, derniereRequete].compactMap { $0 }.max()
+                LimiteUsage.shared.reponseReelle(self, debutRequete: d)
+            }
+            return
+        }
+        if let st = a.limiteStatut {   // rate_limit_event
+            if st == "rejected", !a.limiteSurcout { refusEnAttente = (a.limiteReset, a.limiteType) }
+            else if st != "rejected" { LimiteUsage.shared.releve(type: a.limiteType, resetsAt: a.limiteReset) }
+        }
+        if a.finTour {
+            if let r = refusEnAttente, a.erreur { LimiteUsage.shared.refus(self, resetsAt: r.reset, type: r.type) }
+            refusEnAttente = nil
         }
     }
 
@@ -539,6 +657,9 @@ final class Session {
         }
         let direct = { [weak self] in
             guard let self, let l = ClaudeArgs.messageUtilisateur(texte) else { return }
+            // limite d'usage atteinte : gardé jusqu'à la reprise, comme un message de la page
+            if let o = (try? JSONSerialization.jsonObject(with: Data(l.utf8))) as? [String: Any],
+               LimiteUsage.shared.garder(self, ligne: l, objet: o) { return }
             p.ecrire(l)
             if self.premierMessage == nil { self.premierMessage = texte }
             self.marquerTour(true)
@@ -612,8 +733,10 @@ final class Session {
 
     private func relancer(modele m: String?, effort e: String?) {
         guard !fermee, !dansTerminal else { return }
+        let autreModele = m != modele
         modele = m; effort = e
         journal("session \(sessionId) : relance (modele \(m ?? "défaut"), effort \(e ?? "défaut"))")
+        if autreModele { LimiteUsage.shared.modeleChange(self) }
         let suite = { [weak self] in
             guard let self, !self.fermee else { return }
             let reprise = Transcript.chemin(cwd: self.cwd, sessionId: self.sessionId) != nil
@@ -770,6 +893,8 @@ final class Session {
             fermerAvecBilan(p, projet: id); return
         }
         fermee = true
+        // fermée par Eliot (pas « Quitter ») : plus de « Reprends » automatique à la fin de la limite d'usage
+        if !RegistreSessions.shared.quitte { LimiteUsage.shared.sessionFermee(self) }
         arretVoulu = "fermer"
         avantLancement.removeAll()
         tamponRechargement = nil
@@ -793,6 +918,8 @@ final class Session {
     /// attendus sont finis (2 si un tour était en cours, sinon 1), ou après 5 min.
     private func fermerAvecBilan(_ p: ProcessusClaude, projet id: String) {
         fermee = true
+        // fermée par Eliot (pas « Quitter ») : plus de « Reprends » automatique à la fin de la limite d'usage
+        if !RegistreSessions.shared.quitte { LimiteUsage.shared.sessionFermee(self) }
         arretVoulu = "fermer"
         avantLancement.removeAll()
         for q in questionsOuvertes { BoiteQuestions.shared.oublier(q); Questions.clore(q, texte: "session fermée") }
@@ -858,13 +985,28 @@ final class Session {
         RegistreSessions.shared.signaler(self)
     }
 
+    /// Après une relance de l'app (17/11/2026, Eliot : « quand tu reload on perd le côté travaille, prête ou
+    /// réponse prête, et ce qu'on écrit ») : résumé, dernier message et date reviennent de la mémoire de Registre.
+    /// Une session coupée en plein travail (ou avec des agents de fond, morts avec l'ancien processus) reprend seule.
+    private func restaurerApercu() {
+        guard let m = RegistreSessions.etatRestaure(sessionId) else { return }
+        resume = (m["resume"] as? String).map { String($0.prefix(500)) }
+        dernierMessage = m["dernier"] as? String
+        if let t = m["maj"] as? Double, t > 0 { maj = Date(timeIntervalSince1970: t) }
+        let coupee = (m["etat"] as? String) == "travaille" || ((m["agents"] as? Int) ?? 0) > 0
+        if coupee, promptInitial == nil {
+            journal("session \(sessionId) : coupée en plein travail par la relance, reprise automatique")
+            promptInitial = "Jarvis Terminal vient d'être relancé pendant que tu travaillais : ton tour a été coupé et tes agents de fond éventuels arrêtés. Reprends exactement où tu en étais, sans refaire ce qui est déjà fait."
+        }
+    }
+
     private var cheminEtat: String { DOSSIER_SESSIONS + "/" + sessionId + ".json" }
 
     func ecrireEtat() {
         guard !fermee, !dansTerminal, Validation.sessionId(sessionId) else { return }
         let o: [String: Any] = ["sessionId": sessionId, "cwd": cwd, "projet": nomAffiche, "emoji": projet.emoji,
                                 "pid": pid.map { NSNumber(value: $0) } ?? NSNull(), "etat": etat,
-                                "resume": resume ?? NSNull(), "maj": iso8601.string(from: maj)]
+                                "resume": resume ?? NSNull(), "maj": iso8601.string(from: maj), "agents": agentsEnCours]
         if let d = json(o) { ecrireAtomique(d, cheminEtat) }
     }
 

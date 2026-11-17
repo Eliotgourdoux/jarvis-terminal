@@ -22,6 +22,7 @@ final class RegistreSessions {
         let pid: Int32?
         let dansTerminal: Bool
         let maj: Date
+        let agents: Int
     }
 
     func ajouter(_ s: Session) { sessions.append(s); signaler(s); memoriser() }
@@ -65,7 +66,20 @@ final class RegistreSessions {
         let liste = sessions.filter { !$0.estFermee }.map { ["cwd": $0.cwd, "id": $0.sessionId] }
         Reglages.mettre(liste, "BTSessionsOuvertes")
         if let d = sessions.last?.cwd { Reglages.mettre(d, "BTDernierDossier") }
+        // état affiché dans la barre (Travaille…, résumé, dernier message), relu après une relance
+        var etats: [String: [String: Any]] = [:]
+        for s in sessions where !s.estFermee {
+            var e: [String: Any] = ["etat": s.etat, "maj": s.maj.timeIntervalSince1970, "agents": s.agentsEnCours]
+            if let r = s.resume { e["resume"] = r }
+            if let d = s.dernierMessage { e["dernier"] = String(d.prefix(2000)) }
+            etats[s.sessionId] = e
+        }
+        Reglages.mettre(etats, "BTEtatsSessions")
     }
+
+    /// États mémorisés au dernier « Quitter », consommés une fois par chaque session reprise.
+    private static var etatsRestaures: [String: [String: Any]] = [:]
+    static func etatRestaure(_ id: String) -> [String: Any]? { etatsRestaures.removeValue(forKey: id.lowercased()) }
 
     /// Rouvre les sessions du dernier lancement : reprise si la conversation existe, sinon session neuve
     /// dans le même dossier. Renvoie faux s'il n'y avait rien à rouvrir.
@@ -74,6 +88,12 @@ final class RegistreSessions {
         var liste = (Reglages.d.array(forKey: "BTSessionsOuvertes") as? [[String: String]]) ?? []
         if liste.isEmpty, let d = Reglages.texte("BTDernierDossier") { liste = [["cwd": d]] }
         FenetrePrincipale.shared.debuterRestauration()   // la page affichée au dernier lancement reprend sa place
+        etatsRestaures = (Reglages.d.dictionary(forKey: "BTEtatsSessions") as? [String: [String: Any]]) ?? [:]
+        // la session qui a demandé la relance (app/relancer.sh) avait fini son tour : pas de reprise automatique
+        if let d = Reglages.texte("BTRelanceDemandeur")?.lowercased() {
+            etatsRestaures[d]?["etat"] = "pret"
+            Reglages.mettre(nil, "BTRelanceDemandeur")
+        }
         var n = 0
         for e in liste {
             guard let c = e["cwd"], FileManager.default.fileExists(atPath: c) else { continue }

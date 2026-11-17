@@ -52,6 +52,8 @@
     if (d.etat === 'attend') return { cle: 'attend', texte: 'Claude t’attend' };
     if (d.etat === 'travaille') return { cle: 'travaille', texte: 'Travaille…' };
     if (d.etat === 'termine') return { cle: 'termine', texte: 'Terminée' };
+    // tour fini mais agents de fond encore au travail : la session n'est pas vraiment « prête »
+    if (d.agents > 0) return { cle: 'travaille', texte: d.agents > 1 ? d.agents + ' agents au travail…' : 'Un agent au travail…' };
     if (d.nonLu) return { cle: 'nonlu', texte: 'Réponse prête' };
     return { cle: 'pret', texte: 'Prête' };
   }

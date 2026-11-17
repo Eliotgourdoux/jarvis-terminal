@@ -24,12 +24,16 @@ fi
 # dans Stories Reels FR, restée ensuite 44 min à l'arrêt). On attend qu'elles soient toutes prêtes,
 # 30 min au plus ; au-delà, on abandonne la relance plutôt que de les interrompre.
 occupees() {
-  local f etat sid pid n=0
+  local f etat sid pid agents n=0
   for f in ~/.config/better-terminal/sessions/*.json(N); do
     etat=$(/usr/bin/plutil -extract etat raw -o - "$f" 2>/dev/null)
     sid=$(/usr/bin/plutil -extract sessionId raw -o - "$f" 2>/dev/null)
     pid=$(/usr/bin/plutil -extract pid raw -o - "$f" 2>/dev/null)
-    [[ "$etat" == travaille && "$sid" != "$1" ]] && kill -0 "$pid" 2>/dev/null && { echo "  occupée : $(/usr/bin/plutil -extract projet raw -o - "$f" 2>/dev/null)"; n=$((n+1)); }
+    agents=$(/usr/bin/plutil -extract agents raw -o - "$f" 2>/dev/null)
+    [[ "$agents" == <-> ]] || agents=0   # champ absent (ancienne version de l'app) : plutil écrit son erreur sur stdout
+    # agents de fond (17/11/2026) : la relance les tuerait, y compris ceux de la session qui la demande
+    { [[ "$etat" == travaille && "$sid" != "$1" ]] || (( ${agents:-0} > 0 )) } && kill -0 "$pid" 2>/dev/null \
+      && { echo "  occupée : $(/usr/bin/plutil -extract projet raw -o - "$f" 2>/dev/null) (${etat}, ${agents:-0} agent(s))"; n=$((n+1)); }
   done
   return $(( n == 0 ))
 }
@@ -40,6 +44,7 @@ for i in {1..360}; do
   sleep 5
 done
 
+[[ -n "$1" ]] && defaults write $ID BTRelanceDemandeur "$1"   # pas de reprise automatique pour elle
 osascript -e "tell application id \"$ID\" to quit" || true
 for i in {1..30}; do pgrep -qf "Jarvis Terminal.app/Contents/MacOS" || break; sleep 0.5; done
 pgrep -qf "Jarvis Terminal.app/Contents/MacOS" && { echo "l'app ne s'est pas fermée, relance abandonnée"; exit 1; }

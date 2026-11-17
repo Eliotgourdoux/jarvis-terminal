@@ -38,7 +38,10 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     private(set) var vues: [FenetreSession] = []
     private(set) weak var selection: FenetreSession?
     /// Sessions qui ont fini un tour pendant qu'Eliot regardait ailleurs.
-    private var nonLues: Set<String> = []
+    /// Mémorisé entre deux lancements (17/11/2026) : « Réponse prête » survit à une relance.
+    private var nonLues = Set(Reglages.d.stringArray(forKey: "BTNonLues") ?? []) {
+        didSet { if nonLues != oldValue { Reglages.mettre(Array(nonLues.prefix(100)), "BTNonLues") } }
+    }
     private var barrePrete = false
     /// Relevé CPU / RAM / disque du pied de la barre (Systeme.swift), toutes les 3 s quand la fenêtre est visible.
     private var minuterieSysteme: Timer?
@@ -265,6 +268,14 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     /// ⌘W : ferme la session affichée (la fenêtre reste, avec les autres sessions).
     func fermerSelection() { selection?.fermerFenetre() }
 
+    /// Recharge toutes les pages (sessions et barre) sans toucher aux processus claude : comme ⌘R partout.
+    func toutRecharger() {
+        journal("rechargement de toutes les pages (\(vues.count) vue(s))")
+        vues.forEach { $0.recharger() }
+        barrePrete = false
+        barre?.reloadFromOrigin()
+    }
+
     /// ⌘1…⌘9, dans l'ordre de la barre (sessions du Mac, puis du Victus, ouvertes ou non dans l'app).
     func choisir(numero n: Int) {
         let o = ordre()
@@ -356,7 +367,8 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
                             "etat": a.etat, "resume": a.resume ?? NSNull(), "dernierMessage": a.dernierMessage ?? NSNull(),
                             "modele": a.modele ?? NSNull(), "dansTerminal": a.dansTerminal,
                             "maj": a.maj.timeIntervalSince1970 * 1000, "actif": selection === v, "nonLu": nonLues.contains(a.sessionId),
-                            "machine": "mac"]
+                            "agents": a.agents, "machine": "mac",
+                            "limite": LimiteUsage.shared.attente(a.sessionId).map { ["reprise": $0.reprise.timeIntervalSince1970 * 1000, "messages": $0.messages] as [String: Any] } ?? NSNull()]
                 }
                 guard let d = v.distante else { return nil }
                 return entreeVictus(d.apercu ?? ["id": d.sessionId, "projet": d.projet, "emoji": d.emoji, "cwd": d.cwd, "etat": "pret"],
@@ -419,7 +431,14 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
         }
         let victus = o["machine"] as? String == "victus"
         switch type {
-        case "pret": barrePrete = true; envoyerListe(); demarrerSysteme()
+        case "pret":
+            barrePrete = true; envoyerListe(); demarrerSysteme()
+            appelerBarre("fond", ["actif": Reglages.d.bool(forKey: "BTGarderEnFond")])
+        case "garderEnFond":   // bouton du pied de la barre : « Quitter » arrête les claude, ou les laisse tourner
+            guard let v = o["actif"] as? Bool else { return }
+            Reglages.mettre(v, "BTGarderEnFond")
+            journal("réglage : quitter \(v ? "laisse les claude en fond" : "arrête les claude")")
+            appelerBarre("fond", ["actif": v])
         case "choisir":
             if let v = cible() { selectionner(v) }
             else if let id = idDemande, VictusLien.shared.session(id) != nil { VictusSession.montrer(id) }
