@@ -18,7 +18,10 @@ extension Session {
     var estDiscussion: Bool { cwd == cheminReel(Entrees.dossierDiscussions) }
 
     private static func ligne(_ id: String, _ requete: [String: Any]) -> String? {
-        guard let d = json(["type": "control_request", "request_id": id, "request": requete]) else { return nil }
+        // Une seule ligne : json() indente (.prettyPrinted), et claude lit stdin ligne par ligne. Le « { » seul
+        // sur la première ligne le faisait planter au lancement (code 1, bug du 17/11/2026).
+        guard let d = try? JSONSerialization.data(withJSONObject: ["type": "control_request", "request_id": id, "request": requete],
+                                                  options: [.withoutEscapingSlashes]) else { return nil }
         return String(data: d, encoding: .utf8)
     }
 
