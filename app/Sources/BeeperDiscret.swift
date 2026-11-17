@@ -91,4 +91,85 @@ enum BeeperDiscret {
             if !app.isHidden { app.hide() }
         }
     }
+
+    // MARK: - Beeper vraiment prêt, et envoi confirmé (bug du 17/11/2026)
+    //
+    // Juste après son lancement, l'API de Beeper répond avant que Beeper soit connecté : un envoi renvoie 500
+    // (« Failed to execute tool: sendMessage ») ou ne répond pas avant le délai, mais Beeper GARDE le message et
+    // l'envoie quand il est connecté. L'app affichait un échec, Eliot renvoyait, et Jarvis recevait le même
+    // message trois fois d'un coup. Donc : on attend que les comptes soient connectés avant d'envoyer, et après
+    // une réponse douteuse, on ne renvoie jamais : on vérifie dans le chat que le message est bien parti.
+
+    private static let api = "http://localhost:23373/v1"
+
+    static func jeton() -> String {
+        ((try? String(contentsOfFile: NSHomeDirectory() + "/.config/beeper/token", encoding: .utf8)) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func lire(_ chemin: String, jeton: String, _ r: @escaping (Any?) -> Void) {
+        guard let url = URL(string: api + chemin) else { r(nil); return }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 4)
+        req.setValue("Bearer " + jeton, forHTTPHeaderField: "Authorization")
+        URLSession.shared.dataTask(with: req) { data, rep, _ in
+            guard (rep as? HTTPURLResponse)?.statusCode == 200, let data else { r(nil); return }
+            r(try? JSONSerialization.jsonObject(with: data))
+        }.resume()
+    }
+
+    /// Attend que le compte Beeper (Matrix) et le compte Telegram soient « connected », `delai` au plus.
+    /// `fini(true)` s'ils le sont, `fini(false)` sinon (l'appelant envoie quand même, puis vérifie). File principale.
+    static func attendrePret(delai: TimeInterval = 60, fini: @escaping (Bool) -> Void) {
+        let j = jeton(), debut = Date(), limite = debut.addingTimeInterval(delai)
+        func tic() {
+            lire("/accounts", jeton: j) { o in
+                let comptes = (o as? [[String: Any]]) ?? ((o as? [String: Any])?["items"] as? [[String: Any]]) ?? []
+                func connecte(_ f: ([String: Any]) -> Bool) -> Bool {
+                    comptes.contains { f($0) && ($0["status"] as? String) == "connected" }
+                }
+                let pret = connecte { ($0["accountID"] as? String) == "matrix" } && connecte { ($0["network"] as? String) == "Telegram" }
+                DispatchQueue.main.async {
+                    if pret {
+                        journal("beeper : comptes connectés en \(Int(Date().timeIntervalSince(debut))) s")
+                        // un court répit : « connected » arrive un peu avant que l'envoi passe vraiment
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { fini(true) }
+                    } else if Date() < limite {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: tic)
+                    } else {
+                        journal("beeper : comptes toujours pas connectés après \(Int(delai)) s")
+                        fini(false)
+                    }
+                }
+            }
+        }
+        tic()
+    }
+
+    /// Après une réponse douteuse (500, délai dépassé) : cherche dans le chat, `delai` au plus, un message envoyé
+    /// par Eliot depuis `depuis` qui vérifie `correspond`. `fini(true)` s'il est parti. File principale.
+    static func confirmerEnvoi(chat: String, depuis: Date, delai: TimeInterval = 120,
+                               correspond: @escaping ([String: Any]) -> Bool, fini: @escaping (Bool) -> Void) {
+        let j = jeton(), limite = Date().addingTimeInterval(delai)
+        let permis = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        guard let c = chat.addingPercentEncoding(withAllowedCharacters: permis) else { fini(false); return }
+        let dates = ISO8601DateFormatter()
+        dates.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let datesSimples = ISO8601DateFormatter()
+        func tic() {
+            lire("/chats/\(c)/messages?limit=20", jeton: j) { o in
+                let items = ((o as? [String: Any])?["items"] as? [[String: Any]]) ?? []
+                let trouve = items.contains { m in
+                    guard m["isSender"] as? Bool == true, let t = m["timestamp"] as? String,
+                          let d = dates.date(from: t) ?? datesSimples.date(from: t) else { return false }
+                    return d >= depuis.addingTimeInterval(-5) && correspond(m)
+                }
+                DispatchQueue.main.async {
+                    if trouve { fini(true) }
+                    else if Date() < limite { DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: tic) }
+                    else { fini(false) }
+                }
+            }
+        }
+        tic()
+    }
 }

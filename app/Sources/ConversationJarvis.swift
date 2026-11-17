@@ -250,15 +250,16 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer " + jeton, forHTTPHeaderField: "Authorization")
         req.httpBody = corps
+        let debut = Date()
         URLSession.shared.dataTask(with: req) { [weak self] data, rep, err in
             DispatchQueue.main.async {
                 guard let self else { return }
-                if let err = err as? URLError, [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .timedOut].contains(err.code) {
+                // Rien n'est parti (Beeper fermé) : on le lance, on attend qu'il soit connecté, puis on renvoie.
+                if let err = err as? URLError, Self.beeperFerme(err) {
                     if essai == 1 {
-                        journal("jarvis : Beeper injoignable, lancement caché en arrière-plan puis nouvel essai")
-                        BeeperDiscret.lancer { pret in
-                            if pret { self.envoyerParBeeper(t, essai: 2, fini: fini) }
-                            else { fini("Beeper Desktop ne démarre pas. Ouvre-le, puis renvoie.") }
+                        journal("jarvis : Beeper fermé, lancement caché puis envoi une fois connecté")
+                        Self.demarrerBeeper { erreur in
+                            if let erreur { fini(erreur) } else { self.envoyerParBeeper(t, essai: 2, fini: fini) }
                         }
                     } else {
                         journal("jarvis : Beeper toujours injoignable — \(err.code.rawValue)")
@@ -266,8 +267,17 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
                     }
                     return
                 }
-                if let err { journal("jarvis : envoi Beeper en échec — \(err.localizedDescription)"); fini("erreur réseau : \(err.localizedDescription)"); return }
                 let code = (rep as? HTTPURLResponse)?.statusCode ?? 0
+                // Réponse douteuse : Beeper a peut-être gardé le message et l'enverra. Jamais de renvoi : on vérifie.
+                if (err as? URLError).map({ $0.code == .timedOut || $0.code == .networkConnectionLost }) == true || code >= 500 {
+                    journal("jarvis : réponse douteuse de Beeper (\(err.map { "\(($0 as? URLError)?.code.rawValue ?? 0)" } ?? "code \(code)")), vérification dans le chat")
+                    Self.confirmer(depuis: debut, correspond: { (($0["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == t }) { ok in
+                        if ok { journal("jarvis : message confirmé dans le chat (\(t.count) car.)"); fini(nil) }
+                        else { fini(Self.nonConfirme) }
+                    }
+                    return
+                }
+                if let err { journal("jarvis : envoi Beeper en échec — \(err.localizedDescription)"); fini("erreur réseau : \(err.localizedDescription)"); return }
                 guard (200..<300).contains(code) else {
                     var detail = ""
                     if let data, let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -400,12 +410,12 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
         URLSession.shared.dataTask(with: req) { [weak self] data, rep, err in
             DispatchQueue.main.async {
                 guard let self else { return }
-                if let err = err as? URLError, [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .timedOut].contains(err.code) {
+                // Le dépôt n'envoie rien dans le chat : on peut le refaire sans risque de doublon.
+                if let err = err as? URLError, Self.beeperFerme(err) || err.code == .timedOut || err.code == .networkConnectionLost {
                     if essai == 1 {
-                        journal("jarvis : Beeper injoignable pour le vocal, lancement caché puis nouvel essai")
-                        BeeperDiscret.lancer { pret in
-                            if pret { self.envoyerVocalParBeeper(ogg, duree: duree, essai: 2, fini: fini) }
-                            else { fini("Beeper Desktop ne démarre pas. Ouvre-le, puis réessaie.") }
+                        journal("jarvis : Beeper injoignable pour le vocal, lancement caché puis envoi une fois connecté")
+                        Self.demarrerBeeper { erreur in
+                            if let erreur { fini(erreur) } else { self.envoyerVocalParBeeper(ogg, duree: duree, essai: 2, fini: fini) }
                         }
                     } else { fini("Beeper Desktop ne répond pas. Ouvre-le, puis réessaie.") }
                     return
@@ -428,6 +438,24 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
         }.resume()
     }
 
+    private static let nonConfirme = "Beeper n'a pas confirmé l'envoi. Regarde dans Telegram avant de renvoyer."
+
+    private static func beeperFerme(_ e: URLError) -> Bool {
+        e.code == .cannotConnectToHost || e.code == .cannotFindHost
+    }
+
+    /// Lance Beeper caché, puis attend que Telegram soit vraiment connecté (sinon l'envoi part en 500 et se duplique).
+    private static func demarrerBeeper(_ fini: @escaping (String?) -> Void) {
+        BeeperDiscret.lancer { pret in
+            guard pret else { fini("Beeper Desktop ne démarre pas. Ouvre-le, puis renvoie."); return }
+            BeeperDiscret.attendrePret { _ in fini(nil) }
+        }
+    }
+
+    private static func confirmer(depuis: Date, correspond: @escaping ([String: Any]) -> Bool, fini: @escaping (Bool) -> Void) {
+        BeeperDiscret.confirmerEnvoi(chat: chatBeeper, depuis: depuis, correspond: correspond, fini: fini)
+    }
+
     private func posterMessageBeeper(_ objet: [String: Any], jeton: String, fini: @escaping (String?) -> Void) {
         let permis = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         guard let chat = Self.chatBeeper.addingPercentEncoding(withAllowedCharacters: permis),
@@ -438,10 +466,18 @@ final class ConversationJarvis: NSObject, WKNavigationDelegate {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer " + jeton, forHTTPHeaderField: "Authorization")
         req.httpBody = corps
+        let debut = Date()
         URLSession.shared.dataTask(with: req) { data, rep, err in
             DispatchQueue.main.async {
-                if let err { fini("erreur réseau : \(err.localizedDescription)"); return }
                 let code = (rep as? HTTPURLResponse)?.statusCode ?? 0
+                if (err as? URLError).map({ $0.code == .timedOut || $0.code == .networkConnectionLost }) == true || code >= 500 {
+                    journal("jarvis : réponse douteuse de Beeper pour le vocal, vérification dans le chat")
+                    Self.confirmer(depuis: debut, correspond: { (($0["attachments"] as? [Any]) ?? []).isEmpty == false }) { ok in
+                        fini(ok ? nil : Self.nonConfirme)
+                    }
+                    return
+                }
+                if let err { fini("erreur réseau : \(err.localizedDescription)"); return }
                 guard (200..<300).contains(code) else {
                     var detail = ""
                     if let data, let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
