@@ -302,6 +302,7 @@
     if (ev.key !== 'Escape') return;
     if (!menu.hidden) { fermerMenu(); ev.preventDefault(); }
     else if (!panneau.hidden) { fermerPanneau(); ev.preventDefault(); }
+    else if (!pDisc.hidden) { fermerDiscussions(); ev.preventDefault(); }
   });
   document.addEventListener('mousedown', function (ev) {
     if (!menu.hidden && !menu.contains(ev.target) && !ev.target.closest('#nouvelle, #nouvelle-vide')) fermerMenu();
@@ -317,6 +318,12 @@
     dossiers: rendreDossiers,
     erreur: montrerErreur,
     ouverte: function () { fermerPanneau(); },
+    discussions: function (r) {
+      discussions = (r && Array.isArray(r.liste) ? r.liste : []).filter(function (d) { return d && typeof d.id === 'string'; })
+        .map(function (d) { return { id: d.id, titre: String(d.titre || 'Discussion'), titreAuto: !!d.titreAuto, premier: String(d.premier || ''),
+                                     texte: String(d.texte || ''), maj: Number(d.maj) || 0, messages: Number(d.messages) || 0, ouverte: !!d.ouverte }; });
+      if (!pDisc.hidden) rendreDiscussions();
+    },
     config: function (c) {
       c = c || {};
       if (typeof c.app === 'string') conf.app = c.app;
@@ -342,7 +349,119 @@
   }, 1000);
 
   document.getElementById('nouvelle').addEventListener('click', nouvelle);
-  document.getElementById('discussion').addEventListener('click', function () { envoyer({ type: 'discussion' }); });
+  /* ---------- Discussions passées (17/11/2026) ---------- */
+
+  var pDisc = document.getElementById('panneau-discussions');
+  var rechDisc = document.getElementById('discussions-recherche');
+  var listeDisc = document.getElementById('discussions-liste');
+  var msgDisc = document.getElementById('discussions-message');
+  var boutonDisc = document.getElementById('discussion');
+  var discussions = null;      // dernière liste reçue (gardée entre deux ouvertures)
+  var choixDisc = -1;
+
+  function sansAccents(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+
+  function messageDisc(t) { msgDisc.hidden = !t; msgDisc.textContent = t || ''; }
+
+  function groupeDe(ms) {
+    var d = new Date(ms), h = new Date(); h.setHours(0, 0, 0, 0);
+    var j = (h - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000;
+    if (j <= 0) return 'Aujourd’hui';
+    if (j === 1) return 'Hier';
+    if (j < 7) return 'Cette semaine';
+    if (j < 31) return 'Ce mois-ci';
+    return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  }
+
+  // extrait du texte autour du premier mot cherché, mot surligné
+  function extraitTrouve(texte, mots) {
+    var brut = String(texte || '').replace(/ ¶ /g, ' · ');
+    var plat = sansAccents(brut);
+    var i = -1, mot = '';
+    for (var k = 0; k < mots.length && i < 0; k++) { i = plat.indexOf(mots[k]); mot = mots[k]; }
+    if (i < 0) return null;
+    var debut = Math.max(0, i - 40);
+    var f = document.createDocumentFragment();
+    f.appendChild(document.createTextNode((debut > 0 ? '…' : '') + brut.slice(debut, i)));
+    f.appendChild(el('mark', null, brut.slice(i, i + mot.length)));
+    f.appendChild(document.createTextNode(brut.slice(i + mot.length, i + mot.length + 120)));
+    return f;
+  }
+
+  function rendreDiscussions() {
+    listeDisc.textContent = '';
+    choixDisc = -1;
+    if (!discussions) { messageDisc('Chargement…'); return; }
+    var q = sansAccents(rechDisc.value).trim();
+    var mots = q ? q.split(/\s+/) : [];
+    var l = discussions.filter(function (d) {
+      if (!mots.length) return true;
+      var h = d._h || (d._h = sansAccents(d.titre + ' ' + d.texte));
+      return mots.every(function (m) { return h.indexOf(m) >= 0; });
+    }).slice(0, 150);
+    messageDisc(!discussions.length ? 'Aucune discussion pour l’instant.' : !l.length ? 'Aucune discussion ne contient « ' + rechDisc.value.trim() + ' ».' : '');
+    var groupe = '';
+    l.forEach(function (d) {
+      var g = groupeDe(d.maj);
+      if (g !== groupe) { groupe = g; listeDisc.appendChild(el('div', 'groupe-date', g)); }
+      var b = el('button', 'discussion-passee' + (d.titreAuto ? '' : ' sans-titre'));
+      b.type = 'button';
+      b.setAttribute('role', 'option');
+      b.dataset.id = d.id;
+      b.title = d.premier || d.titre;
+      b.appendChild(el('span', 'discussion-titre', d.titre));
+      var inf = el('span', 'discussion-infos');
+      inf.appendChild(el('span', null, temps(d.maj)));
+      inf.appendChild(el('span', null, '· ' + d.messages + ' message' + (d.messages > 1 ? 's' : '')));
+      if (d.ouverte) inf.appendChild(el('span', 'ouverte', '· ouverte'));
+      b.appendChild(inf);
+      if (mots.length && sansAccents(d.titre).indexOf(mots[0]) < 0) {
+        var x = extraitTrouve(d.texte, mots);
+        if (x) { var e = el('span', 'discussion-extrait'); e.appendChild(x); b.appendChild(e); }
+      }
+      b.addEventListener('click', function () { reprendre(d.id); });
+      listeDisc.appendChild(b);
+    });
+  }
+
+  function reprendre(id) { fermerDiscussions(); envoyer({ type: 'reprendreDiscussion', id: id }); }
+
+  function ouvrirDiscussions() {
+    fermerMenu(); fermerPanneau();
+    pDisc.hidden = false;
+    boutonDisc.setAttribute('aria-expanded', 'true');
+    rechDisc.value = '';
+    rendreDiscussions();
+    envoyer({ type: 'discussions' });
+    rechDisc.focus();
+  }
+
+  function fermerDiscussions() { pDisc.hidden = true; boutonDisc.setAttribute('aria-expanded', 'false'); }
+
+  function choisirDisc(pas) {
+    var b = listeDisc.querySelectorAll('.discussion-passee');
+    if (!b.length) return;
+    if (choixDisc >= 0 && b[choixDisc]) b[choixDisc].classList.remove('choisie');
+    choixDisc = Math.max(0, Math.min(b.length - 1, choixDisc + pas));
+    b[choixDisc].classList.add('choisie');
+    b[choixDisc].scrollIntoView({ block: 'nearest' });
+  }
+
+  boutonDisc.addEventListener('click', function () { if (pDisc.hidden) ouvrirDiscussions(); else fermerDiscussions(); });
+  document.getElementById('discussions-fermer').addEventListener('click', fermerDiscussions);
+  document.getElementById('discussion-neuve').addEventListener('click', function () { fermerDiscussions(); envoyer({ type: 'discussion' }); });
+  rechDisc.addEventListener('input', rendreDiscussions);
+  rechDisc.addEventListener('keydown', function (ev) {
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); choisirDisc(1); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); choisirDisc(-1); }
+    else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      var b = listeDisc.querySelectorAll('.discussion-passee');
+      var c = b[choixDisc >= 0 ? choixDisc : 0];
+      if (c && (choixDisc >= 0 || rechDisc.value.trim())) reprendre(c.dataset.id);
+      else if (!rechDisc.value.trim()) { fermerDiscussions(); envoyer({ type: 'discussion' }); }
+    } else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); fermerDiscussions(); }
+  });
   document.getElementById('nouvelle-vide').addEventListener('click', nouvelle);
 
   if (!pont) {
@@ -364,6 +483,13 @@
     var envoyerVrai = envoyer;
     envoyer = function (o) {
       envoyerVrai(o);
+      if (o.type === 'discussions') setTimeout(function () {
+        window.barreSessions.discussions({ liste: [
+          { id: 'x1', titre: 'Baisse de qualité d’Opus', titreAuto: true, premier: 'va souder internet avec 20 agents', texte: 'va souder internet avec 20 agents pour voir pourquoi opus parait moins bon', maj: m - 600000, messages: 14, ouverte: true },
+          { id: 'x2', titre: 'Épisodes fillers de Black Clover', titreAuto: true, premier: 'dans black clover apres lepisode 100', texte: 'dans black clover apres lepisode 100 lesquels sont des fillers ¶ pourtant 123 a 125 c’est la fin du proces', maj: m - 86400000 * 2, messages: 22 },
+          { id: 'x3', titre: 'salut bro, tu peux anlayser une conv revolut', titreAuto: false, premier: 'salut bro, tu peux anlayser une conv revolut', texte: 'salut bro, tu peux anlayser une conv revolut', maj: m - 86400000 * 9, messages: 6 }
+        ] });
+      }, 50);
       if (o.type === 'dossiers') setTimeout(function () {
         rendreDossiers({ home: '/home/eliotgrx', liste: [
           { cwd: '/home/eliotgrx/projets/labo-victus', nom: 'labo-victus', maj: m - 40000 },

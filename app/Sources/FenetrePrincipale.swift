@@ -339,7 +339,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
             return
         }
         guard let s = selection?.sessionLiee else { window.title = "Jarvis Terminal"; return }
-        window.title = s.projet.emoji + " " + s.nomAffiche + (s.apercu.dansTerminal ? " — dans le Terminal" : "")
+        window.title = (s.projet.emoji.isEmpty ? "" : s.projet.emoji + " ") + s.nomAffiche + (s.apercu.dansTerminal ? " — dans le Terminal" : "")
     }
 
     private func envoyerListe() {
@@ -456,6 +456,18 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
                 }
             }
         case "discussion": Entrees.nouvelleDiscussion()
+        case "discussions":
+            ArchiveDiscussions.lister { [weak self] l in
+                let liste: [[String: Any]] = l.prefix(300).map { e in
+                    ["id": e.id, "titre": e.titre, "titreAuto": e.titreAuto, "premier": e.premier, "texte": e.texte,
+                     "maj": e.maj.timeIntervalSince1970 * 1000, "messages": e.messages,
+                     "ouverte": RegistreSessions.shared.session(e.id) != nil]
+                }
+                self?.appelerBarre("discussions", ["liste": liste])
+            }
+        case "reprendreDiscussion":
+            guard let id = idDemande else { journal("barre : discussion à reprendre sans id valable"); return }
+            Entrees.ouvrir(DemandeSession(cwd: cheminReel(Entrees.dossierDiscussions), resume: id))
         default: journal("barre : type inconnu « \(type.prefix(30)) »")
         }
     }

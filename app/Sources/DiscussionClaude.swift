@@ -63,23 +63,52 @@ extension Session {
                     journal("session \(sessionId) : publication dans l'app Claude refusée")
                 }
             } else if id.hasPrefix("bt-titre-") {
+                titreDemande = false
                 if a.reponseSucces, let t = a.reponseContenu?["title"] as? String { appliquerTitre(t, renommer: true, p) }
-                else { titreDemande = false; journal("session \(sessionId) : titre non généré") }
+                else { journal("session \(sessionId) : titre non généré") }
             }
             return
         }
-        if let t = a.titre { appliquerTitre(t, renommer: false, p) }
-        if a.finTour, titre == nil, !titreDemande { demanderTitre(p) }
+        if let t = a.titre {
+            // Un titre qui n'est pas le nôtre (renommage depuis l'app Claude) : Eliot l'a choisi, on n'y touche plus.
+            if !titreDemande, t.trimmingCharacters(in: .whitespacesAndNewlines) != titre, titre != nil { titreManuel = true }
+            appliquerTitre(t, renommer: false, p)
+        }
+        if a.finTour {
+            toursDiscussion += 1
+            // Titre au premier échange, puis remis à jour au fil de la conversation (17/11/2026, Eliot : « qu'elles
+            // changent automatiquement leur nom en fonction de ce que j'ai fait dedans »).
+            if !titreDemande, !titreManuel, titre == nil || Self.toursRetitrage.contains(toursDiscussion) { demanderTitre(p) }
+        }
+    }
+
+    private static let toursRetitrage: Set<Int> = [3, 6, 10, 15, 22, 30, 45, 60]
+    private static let cleTitresManuels = "BTTitresManuels"
+
+    private var titreManuel: Bool {
+        get { (Reglages.d.stringArray(forKey: Self.cleTitresManuels) ?? []).contains(sessionId) }
+        set {
+            var l = (Reglages.d.stringArray(forKey: Self.cleTitresManuels) ?? []).filter { $0 != sessionId }
+            if newValue { l.append(sessionId); journal("session \(sessionId) : titre choisi par Eliot, plus de renommage automatique") }
+            Reglages.mettre(Array(l.suffix(300)), Self.cleTitresManuels)
+        }
     }
 
     private func demanderTitre(_ p: ProcessusClaude) {
-        var desc = (premierMessage ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if desc.isEmpty { desc = (dernierMessage ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard !desc.isEmpty else { return }
         titreDemande = true
-        let id = "bt-titre-" + UUID().uuidString.prefix(8).lowercased()
-        guard let l = Self.ligne(id, ["subtype": "generate_session_title", "description": String(desc.prefix(2000)), "persist": true]) else { return }
-        p.ecrire(l)
+        let repli = ((premierMessage ?? "").isEmpty ? (dernierMessage ?? "") : premierMessage!).trimmingCharacters(in: .whitespacesAndNewlines)
+        let chemin = Transcript.chemin(cwd: cwd, sessionId: sessionId)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            // toute la conversation (messages d'Eliot), pas seulement le premier message
+            let desc = chemin.flatMap { ArchiveDiscussions.description($0) } ?? repli
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard !desc.isEmpty, let l = Self.ligne("bt-titre-" + UUID().uuidString.prefix(8).lowercased(),
+                                                        ["subtype": "generate_session_title", "description": String(desc.prefix(2000)), "persist": true])
+                else { self.titreDemande = false; return }
+                p.ecrire(l)
+            }
+        }
     }
 
     private func appliquerTitre(_ brut: String, renommer: Bool, _ p: ProcessusClaude?) {

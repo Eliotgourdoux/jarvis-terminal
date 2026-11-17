@@ -33,7 +33,8 @@ final class Session {
     /// Discussions (16/11/2026, Eliot : « lisible dans l'app bureau et téléphone ») : titre généré par Claude après
     /// le premier échange, et session publiée dans l'app Claude (Remote Control). Voir DiscussionClaude.swift.
     var titre: String?
-    var titreDemande = false
+    var titreDemande = false            // requête de titre en cours
+    var toursDiscussion = 0             // fins de tour depuis le lancement (retitrage au fil de la conversation)
     var premierMessage: String?
     var nomAffiche: String { titre ?? projet.nom }
     private var fenetre: FenetreSession!
@@ -876,7 +877,7 @@ final class Session {
     private func notifierAttente() {
         if NSApp.isActive && fenetre.estDevant { journal("session \(sessionId) : attend (fenêtre au premier plan, pas de notification)"); return }
         if PiloteDev.actif { journal("session \(sessionId) : attend (mode pilote : notification non envoyée)"); return }
-        let titre = projet.emoji + " " + nomAffiche
+        let titre = projet.emoji.isEmpty ? nomAffiche : projet.emoji + " " + nomAffiche
         var message = resume?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if message.isEmpty { message = "Claude attend votre réponse." }
         while message.hasPrefix("-") || message.hasPrefix("[") { message.removeFirst() }   // lu comme option sinon

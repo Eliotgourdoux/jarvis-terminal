@@ -13,7 +13,7 @@
 
 <header class="tete">
   <span class="tete-titre">Sessions</span>
-  <button type="button" id="discussion" class="nouvelle" title="Discussion libre, sans projet (⇧⌘N)" aria-label="Nouvelle discussion">
+  <button type="button" id="discussion" class="nouvelle" title="Discussions : nouvelle ou ancienne (double clic ou ⇧⌘N pour une nouvelle)" aria-label="Discussions" aria-expanded="false" aria-controls="panneau-discussions">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H7l-3 2.5V11H3a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/></svg>
   </button>
   <button type="button" id="nouvelle" class="nouvelle" title="Nouvelle session (⌘N)" aria-label="Nouvelle session">
@@ -42,9 +42,33 @@
   <div id="panneau-dossiers" class="panneau-dossiers" role="listbox" aria-label="Dossiers récents du Victus"></div>
 </section>
 
+<!-- Discussions passées (17/11/2026, Eliot : « que je puisse les retrouver si jamais je les perds »). -->
+<section id="panneau-discussions" class="panneau-victus panneau-discussions" aria-label="Discussions" hidden>
+  <div class="panneau-tete">
+    <span class="panneau-titre">Discussions</span>
+    <button type="button" id="discussions-fermer" class="fermer-panneau" aria-label="Fermer">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+    </button>
+  </div>
+  <button type="button" id="discussion-neuve" class="discussion-neuve">Nouvelle discussion<span class="menu-touche">⇧⌘N</span></button>
+  <input id="discussions-recherche" class="discussions-recherche" type="search" spellcheck="false" autocomplete="off"
+         placeholder="Rechercher dans les discussions…" aria-label="Rechercher dans les discussions">
+  <p id="discussions-message" class="panneau-message" hidden></p>
+  <div id="discussions-liste" class="panneau-dossiers" role="listbox" aria-label="Discussions passées"></div>
+</section>
+
 <nav id="liste" class="liste" aria-label="Sessions ouvertes"></nav>
 
 <p id="vide" class="vide" hidden>Aucune session ouverte.<br><button type="button" id="nouvelle-vide" class="lien">Ouvrir un projet</button></p>
+
+<!-- « Quitter » arrête les claude, ou les laisse tourner en fond (18/11/2026, demande d'Eliot). -->
+<footer class="pied fond" id="fond" role="radiogroup" aria-label="En quittant l’app">
+  <span class="fond-nom">En quittant</span>
+  <span class="fond-choix">
+    <button type="button" role="radio" data-fond="0" aria-checked="true" title="⌘Q arrête Claude dans chaque session ; elles se rouvrent au prochain lancement">Arrêter</button>
+    <button type="button" role="radio" data-fond="1" aria-checked="false" title="⌘Q ferme seulement la fenêtre : Claude continue de travailler, l’app se rebranche au prochain lancement">Laisser tourner</button>
+  </span>
+</footer>
 
 <!-- La machine en direct (15/11/2026, demande d'Eliot, « en mode btop ») : CPU, RAM, disque. Rempli par js/systeme.js. -->
 <footer class="pied systeme" id="systeme" aria-label="Machine"></footer>

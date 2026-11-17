@@ -206,7 +206,7 @@ enum RegistreProjets {
 
     static func info(cwd: String) -> InfoProjet {
         let defaut = InfoProjet(nom: (cwd as NSString).lastPathComponent, emoji: "📁")
-        if cwd == cheminReel(Entrees.dossierDiscussions) { return InfoProjet(nom: "Discussion", emoji: "💬") }
+        if cwd == cheminReel(Entrees.dossierDiscussions) { return InfoProjet(nom: "Discussion", emoji: "") }   // pas d'emoji (Eliot, 17/11/2026)
         guard let d = FileManager.default.contents(atPath: chemin),
               let liste = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return defaut }
         let projets: [(chemin: String, nom: String, emoji: String, id: String?)] = liste.compactMap {
