@@ -52,6 +52,9 @@ Cliquez sur une vignette pour ouvrir la vidéo.
 <td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-4-jarvis-partout.mp4"><img src="docs/videos/4-jarvis-partout.jpg" width="260" alt="4. Jarvis partout"></a><br>4. Jarvis partout · 37 s</td>
 <td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-5-details.mp4"><img src="docs/videos/5-details.jpg" width="260" alt="5. Les détails"></a><br>5. Les détails · 39 s</td>
 </tr>
+<tr>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-6-nouveautes.mp4"><img src="docs/videos/6-nouveautes.jpg" width="260" alt="6. Les nouveautés"></a><br>6. Les nouveautés · 37 s</td>
+</tr>
 </table>
 
 ## Installation
