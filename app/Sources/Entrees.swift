@@ -34,6 +34,10 @@ enum Entrees {
             guard let d = demande(cwd: cwd, resume: q["resume"], prompt: q["prompt"], modele: q["modele"] ?? q["model"], effort: q["effort"]) else { return }
             if let p = d.prompt, !fiable, !confirmer(d, prompt: p) { journal("URL session : refusée par Eliot"); return }
             ouvrir(d)
+        case "recharger":
+            // Seule l'interface (ui/) a changé : les pages se rechargent, les processus claude ne s'arrêtent pas
+            // (app/relancer.sh, 18/11/2026 : ne plus attendre ni couper les sessions pour un changement d'interface).
+            FenetrePrincipale.shared.toutRecharger()
         case "focus":
             if let id = q["session"], let s = RegistreSessions.shared.session(id) { s.mettreDevant() }
             else if let id = q["session"], VictusSession.existante(id) != nil || VictusLien.shared.session(id) != nil {

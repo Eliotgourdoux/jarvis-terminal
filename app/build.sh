@@ -18,6 +18,9 @@ swiftc -O -swift-version 5 -target arm64-apple-macos14 \
   -framework AppKit -framework WebKit -framework Security -framework AVFoundation -framework CoreMedia -framework Carbon \
   -o .build/$EXE Sources/*.swift
 
+# empreinte du code Swift : relancer.sh ne quitte l'app que si elle a changé depuis le dernier lancement
+cat Sources/*.swift | shasum | cut -d' ' -f1 > .build/sources.sha
+
 APP="build/$NOM.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

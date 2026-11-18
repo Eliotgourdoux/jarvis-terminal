@@ -20,6 +20,16 @@ if [[ -n "$T" ]]; then
   done
 fi
 
+# Seule l'interface a changé depuis le dernier lancement (même empreinte du code Swift) : pas besoin de quitter.
+# Les pages se rechargent sur place et aucune session n'est coupée, même en plein travail (18/11/2026).
+BUILD="$(cd "$(dirname "$0")" && pwd)/.build"
+if [[ -s "$BUILD/sources.sha" && -s "$BUILD/lancee.sha" ]] && cmp -s "$BUILD/sources.sha" "$BUILD/lancee.sha" \
+   && pgrep -qf "Jarvis Terminal.app/Contents/MacOS"; then
+  open -g "betterterminal://recharger"
+  echo "$(date '+%H:%M:%S') interface seule : pages rechargées, app non quittée"
+  exit 0
+fi
+
 # Jamais pendant qu'une autre session travaille (16/11/2026 : la relance a coupé une demande en cours
 # dans Stories Reels FR, restée ensuite 44 min à l'arrêt). On attend qu'elles soient toutes prêtes,
 # 30 min au plus ; au-delà, on abandonne la relance plutôt que de les interrompre.
@@ -37,7 +47,12 @@ occupees() {
   done
   return $(( n == 0 ))
 }
+# L'app en marche sait laisser ses claude tourner pendant qu'elle redémarre (18/11/2026, marqueur écrit plus bas
+# au premier lancement d'une version qui le sait) : rien n'est coupé, donc on n'attend personne.
+GARDE=""
+[[ -f "$BUILD/garde-ok" ]] && GARDE=1
 for i in {1..360}; do
+  [[ -n "$GARDE" ]] && break
   occupees "$1" >/tmp/jarvis-relance-occupees.txt || break
   (( i == 1 )) && { echo "$(date '+%H:%M:%S') attente de sessions qui travaillent :"; cat /tmp/jarvis-relance-occupees.txt; }
   (( i == 360 )) && { echo "$(date '+%H:%M:%S') sessions toujours au travail après 30 min : relance abandonnée"; exit 1; }
@@ -45,9 +60,12 @@ for i in {1..360}; do
 done
 
 [[ -n "$1" ]] && defaults write $ID BTRelanceDemandeur "$1"   # pas de reprise automatique pour elle
+[[ -n "$GARDE" ]] && { defaults write $ID BTGarderUneFois -bool true; echo "$(date '+%H:%M:%S') les claude restent en fond pendant la relance"; }
 osascript -e "tell application id \"$ID\" to quit" || true
 for i in {1..30}; do pgrep -qf "Jarvis Terminal.app/Contents/MacOS" || break; sleep 0.5; done
 pgrep -qf "Jarvis Terminal.app/Contents/MacOS" && { echo "l'app ne s'est pas fermée, relance abandonnée"; exit 1; }
 [[ "$2" == jarvis ]] && defaults write $ID BTModeVocal -bool true
 open "$APP"
+[[ -s "$BUILD/sources.sha" ]] && cp "$BUILD/sources.sha" "$BUILD/lancee.sha"
+touch "$BUILD/garde-ok"
 echo "$(date '+%H:%M:%S') relancée"
