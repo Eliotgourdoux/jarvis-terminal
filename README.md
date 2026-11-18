@@ -4,6 +4,8 @@ Une app Mac qui affiche les sessions [Claude Code](https://claude.com/claude-cod
 
 Ce n'est pas un terminal. Le moteur reste `claude`, lancé en mode stream-json : même Claude Code, mêmes `CLAUDE.md`, hooks, skills et compte. Seul l'affichage change.
 
+![Une conversation dans Jarvis Terminal : barre des sessions à gauche, réponse mise en forme à droite](docs/captures/conversation.jpg)
+
 ## Ce que ça apporte
 
 - **Lecture** : titres, tableaux, blocs de code copiables, appels d'outils repliés, messages bien séparés.
@@ -14,6 +16,43 @@ Ce n'est pas un terminal. Le moteur reste `claude`, lancé en mode stream-json :
 - **Visuels dans la conversation** : graphiques (Chart.js), diagrammes (mermaid), pages HTML interactives, photos, vidéos et vocaux.
 - **Dictée** à la barre espace et mode vocal, avec transcription sur le Mac.
 - **Filet de sécurité** : un bouton rouvre la même session dans le Terminal avec `claude --resume`.
+
+## En images
+
+Les captures utilisent des projets fictifs.
+
+**Graphiques et diagrammes dans la conversation**
+
+![Un diagramme mermaid et un graphique affichés dans la réponse](docs/captures/apercus.jpg)
+
+**Questions de Claude, avec des boutons**
+
+![Une question à choix multiples posée par Claude](docs/captures/question.jpg)
+
+**Demandes d'autorisation**
+
+![Une demande d'autorisation pour une commande](docs/captures/permission.jpg)
+
+**Conversation Telegram dans l'app**
+
+![La conversation Telegram avec Jarvis, avec un vocal](docs/captures/jarvis.jpg)
+
+## En vidéo
+
+Cliquez sur une vignette pour ouvrir la vidéo.
+
+<table>
+<tr>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-0-bande-annonce.mp4"><img src="docs/videos/0-bande-annonce.jpg" width="260" alt="Bande-annonce"></a><br>Bande-annonce · 45 s</td>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-1-lancer.mp4"><img src="docs/videos/1-lancer.jpg" width="260" alt="1. Lancer"></a><br>1. Lancer · 39 s</td>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-2-lire.mp4"><img src="docs/videos/2-lire.jpg" width="260" alt="2. Lire"></a><br>2. Lire · 39 s</td>
+</tr>
+<tr>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-3-mode-jarvis.mp4"><img src="docs/videos/3-mode-jarvis.jpg" width="260" alt="3. Mode Jarvis"></a><br>3. Mode Jarvis · 40 s</td>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-4-jarvis-partout.mp4"><img src="docs/videos/4-jarvis-partout.jpg" width="260" alt="4. Jarvis partout"></a><br>4. Jarvis partout · 37 s</td>
+<td align="center"><a href="https://github.com/Eliotgourdoux/jarvis-terminal/releases/download/demo/jarvis-terminal-5-details.mp4"><img src="docs/videos/5-details.jpg" width="260" alt="5. Les détails"></a><br>5. Les détails · 39 s</td>
+</tr>
+</table>
 
 ## Installation
 
