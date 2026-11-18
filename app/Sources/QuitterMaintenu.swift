@@ -74,10 +74,14 @@ enum QuitterMaintenu {
     private static func afficher() {
         let p = panneau ?? construire()
         let enCours = RegistreSessions.shared.sessions.filter { $0.etat == "travaille" }.count
-        sousTitre?.stringValue = enCours == 0 ? "Tes sessions se rouvriront au prochain lancement."
+        let enFond = Reglages.d.bool(forKey: "BTGarderEnFond")
+        sousTitre?.stringValue = enFond ? (enCours == 0 ? "Tes sessions restent en fond et reviendront au prochain lancement."
+                                           : enCours == 1 ? "1 session travaille : elle continue en fond."
+                                           : "\(enCours) sessions travaillent : elles continuent en fond.")
+            : enCours == 0 ? "Tes sessions se rouvriront au prochain lancement."
             : enCours == 1 ? "1 session travaille : elle sera interrompue."
             : "\(enCours) sessions travaillent : elles seront interrompues."
-        sousTitre?.textColor = enCours == 0 ? NSColor(cgColor: couleur(0xB9B1A3)) : NSColor(cgColor: couleur(0xE8B04B))
+        sousTitre?.textColor = enCours == 0 || enFond ? NSColor(cgColor: couleur(0xB9B1A3)) : NSColor(cgColor: couleur(0xE8B04B))
         CATransaction.begin(); CATransaction.setDisableActions(true)
         barre?.frame.size.width = 0
         CATransaction.commit()
