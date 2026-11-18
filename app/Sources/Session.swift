@@ -245,19 +245,25 @@ final class Session {
         pagePrete = true
         file.removeAll()
         if !dejaPrete {
+            dejaPrete = true
+            // claude laissé en fond au dernier « Quitter » : on se rebranche dessus au lieu d'en lancer un autre
+            if repriseDemandee, rattacher() { return }
             pousserDirect("info", info())
             dernierVocalEtat = nil
             envoyerVocalEtat(MoteurVocal.shared.etatPage(pour: self))
-            dejaPrete = true
             if repriseDemandee { envoyerHistorique { [weak self] in self?.demarrer() } }
             else {
                 if LimiteUsage.shared.active { pousserDirect("limite", LimiteUsage.shared.etatPage(self)) }
                 demarrer()
             }
-        } else {
-            // ⌘R ou page rechargée : la conversation est reconstruite depuis le transcript (écrit au fil de l'eau).
-            // Le processus, lui, n'a rien vu : `info.direct` dit à la page où il en est (tour en cours, questions),
-            // puis ce qui est arrivé pendant le rechargement est rejoué après l'historique, dans l'ordre.
+        } else if !rattrapageEnCours { reposerPage() }
+    }
+
+    /// ⌘R ou page rechargée (ou rebranchement sur un claude laissé en fond) : la conversation est reconstruite
+    /// depuis le transcript (écrit au fil de l'eau). Le processus, lui, n'a rien vu : `info.direct` dit à la page
+    /// où il en est (tour en cours, questions), puis ce qui est arrivé entre-temps est rejoué après l'historique.
+    private func reposerPage() {
+        do {
             if tamponRechargement == nil { tamponRechargement = [] }
             var i = info()
             if let p = processus, !p.fini, arretVoulu == nil, !dansTerminal {
@@ -338,27 +344,31 @@ final class Session {
             e["BT_APP"] = "1"
             e["PWD"] = self.cwd
             let args = ClaudeArgs.arguments(sessionId: self.sessionId, reprise: reprise, modele: self.modele, effort: self.effort)
+            // un claude de cette session tourne encore sans être rebranché (app tuée, rebranchement raté) :
+            // deux claude sur la même conversation se marcheraient dessus, on l'arrête d'abord
+            if let orphelin = self.claudeOrphelin() {
+                journal("session \(self.sessionId) : ancien claude pid \(orphelin) encore en vie, arrêté avant le lancement")
+                _ = kill(-orphelin, SIGTERM); _ = kill(orphelin, SIGTERM)
+                try? FileManager.default.removeItem(atPath: self.cheminVivant)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    _ = kill(-orphelin, SIGKILL)
+                    self?.lancer(reprise: reprise, lance: lance)
+                }
+                return
+            }
             let p: ProcessusClaude
-            do { p = try ProcessusClaude(exe: exe, args: args, env: e, cwd: self.cwd) }
+            do { p = try ProcessusClaude(exe: exe, args: args, env: e, cwd: self.cwd, dossier: self.dossierVivant) }
             catch {
                 journal("session \(self.sessionId) : lancement impossible — \(error)")
                 self.pousser("stderr", "Lancement de claude impossible : \(error)\n")
                 self.pousser("fin", ["code": -1]); return
             }
-            p.surLigne = { [weak self, weak p] l in
-                let a = Session.analyser(l)
-                DispatchQueue.main.async { if let p { self?.ligneClaude(l, a, de: p) } }
-            }
-            p.surStderr = { [weak self] l in
-                DispatchQueue.main.async { self?.journalStderr(l); self?.pousser("stderr", l + "\n") }
-            }
-            p.surFin = { [weak self, weak p] code in
-                DispatchQueue.main.async { if let p { self?.finProcessus(p, code) } }
-            }
+            self.brancher(p)
             self.processus = p
             self.lanceA = Date()
             self.arretVoulu = nil
             self.oublierProcessus()
+            self.ecrireVivant(p, detache: nil)
             p.ecouter()
             journal("session \(self.sessionId) : pid \(p.pid) : \(exe) \(args.joined(separator: " "))")
             let enAttente = self.avantLancement
@@ -373,6 +383,131 @@ final class Session {
             self.publierDansClaude(p)
             lance?()
         }
+    }
+
+    private func brancher(_ p: ProcessusClaude) {
+        p.surLigne = { [weak self, weak p] l, rattrapage in
+            let a = Session.analyser(l)
+            DispatchQueue.main.async { if let p { self?.ligneClaude(l, a, de: p, rattrapage: rattrapage) } }
+        }
+        p.surStderr = { [weak self] l in
+            DispatchQueue.main.async { self?.journalStderr(l); self?.pousser("stderr", l + "\n") }
+        }
+        p.surFin = { [weak self, weak p] code in
+            DispatchQueue.main.async { if let p { self?.finProcessus(p, code) } }
+        }
+    }
+
+    // MARK: - claude laissé en fond (ProcessusClaude.swift) : se détacher en quittant, se rebrancher au retour
+
+    private var dossierVivant: String { DOSSIER_BT + "/vivants/" + sessionId }
+    private var cheminVivant: String { dossierVivant + "/vivant.json" }
+    /// Vrai entre le rebranchement et la fin de la lecture de ce que claude a écrit en l'absence de l'app.
+    private var rattrapageEnCours = false
+
+    /// Fiche du processus : écrite au lancement (pour arrêter un orphelin après un plantage de l'app), complétée
+    /// au détachement avec ce qu'il faut pour se rebrancher (`detache` = octets de stdout déjà lus).
+    private func ecrireVivant(_ p: ProcessusClaude, detache: UInt64?) {
+        var o: [String: Any] = ["pid": Int(p.pid), "debut": ProcessusClaude.debut(p.pid) ?? 0, "sortie": p.nomSortie,
+                                "lanceA": lanceA.timeIntervalSince1970, "cwd": cwd]
+        if let off = detache {
+            o["detache"] = true
+            o["offset"] = NSNumber(value: off)
+            o["tourEnCours"] = tourEnCours
+            if let d = debutTour { o["debutTour"] = d.timeIntervalSince1970 }
+            o["enAttente"] = demandesEnAttente.map { $0.ligne }
+            if let r = reponseInitialize { o["initialise"] = r }
+            if let m = modele { o["modele"] = m }
+            if let e = effort { o["effort"] = e }
+            if let t = premierMessage { o["premierMessage"] = String(t.prefix(2000)) }
+            o["toursDiscussion"] = toursDiscussion
+        }
+        if let d = json(o) { _ = ecrireAtomique(d, cheminVivant) }
+    }
+
+    private func lireVivant() -> [String: Any]? {
+        guard let d = FileManager.default.contents(atPath: cheminVivant) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
+    }
+
+    /// pid du claude de la fiche s'il est encore en vie (même processus, pas un pid repris par un autre).
+    private func pidVivant(_ o: [String: Any]) -> pid_t? {
+        guard let n = o["pid"] as? Int, n > 1, let d = o["debut"] as? Double, d > 0 else { return nil }
+        let pid = pid_t(n)
+        guard kill(pid, 0) == 0, let reel = ProcessusClaude.debut(pid), abs(reel - d) < 0.01 else { return nil }
+        return pid
+    }
+
+    private func claudeOrphelin() -> pid_t? {
+        guard let o = lireVivant(), let pid = pidVivant(o), pid != processus?.pid else { return nil }
+        return pid
+    }
+
+    /// Cette session a-t-elle été laissée en fond au dernier « Quitter » ?
+    private var laisseeEnFond: Bool { (lireVivant()?["detache"] as? Bool) == true }
+
+    /// Se rebranche sur le claude laissé en fond. Faux s'il n'y en a pas (ou s'il est mort entre-temps) :
+    /// la session reprend alors normalement, avec `--resume`.
+    private func rattacher() -> Bool {
+        guard !PiloteDev.actif, let o = lireVivant(), (o["detache"] as? Bool) == true, let pid = pidVivant(o),
+              let sortie = o["sortie"] as? String else { return false }
+        let depuis = (o["offset"] as? NSNumber)?.uint64Value ?? 0
+        guard let p = try? ProcessusClaude(attache: pid, dossier: dossierVivant, nomSortie: sortie, depuis: depuis) else {
+            journal("session \(sessionId) : claude pid \(pid) laissé en fond, mais rebranchement impossible")
+            return false
+        }
+        journal("session \(sessionId) : rebranchée sur claude pid \(pid) laissé en fond (lecture depuis l'octet \(depuis))")
+        // l'état que le transcript ne contient pas, tel qu'il était en partant ; les lignes écrites depuis le mettent à jour
+        oublierProcessus()
+        tourEnCours = (o["tourEnCours"] as? Bool) ?? false
+        debutTour = (o["debutTour"] as? Double).map { Date(timeIntervalSince1970: $0) }
+        reponseInitialize = o["initialise"] as? [String: Any]
+        for l in (o["enAttente"] as? [String]) ?? [] {
+            if let id = Session.analyser(l)?.demande { demandesEnAttente.append((id: id, ligne: l)) }
+        }
+        if modele == nil { modele = o["modele"] as? String }
+        if effort == nil { effort = o["effort"] as? String }
+        if premierMessage == nil { premierMessage = o["premierMessage"] as? String }
+        toursDiscussion = (o["toursDiscussion"] as? Int) ?? toursDiscussion
+        lanceA = (o["lanceA"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
+        promptInitial = nil
+        demarre = true
+        arretVoulu = nil
+        processus = p
+        // comme un rechargement de page : rien ne va à la page avant l'historique, le direct est gardé puis rejoué
+        tamponRechargement = []
+        rattrapageEnCours = true
+        brancher(p)
+        p.surRattrape = { [weak self, weak p] in
+            DispatchQueue.main.async {
+                guard let self, let p, p === self.processus, self.rattrapageEnCours else { return }
+                self.rattrapageEnCours = false
+                self.ecrireVivant(p, detache: nil)   // de nouveau tenue par l'app
+                self.ecrireEtat()
+                RegistreSessions.shared.signaler(self)
+                self.reposerPage()   // (si claude est mort entre-temps, elle envoie aussi la fin à la page)
+            }
+        }
+        p.ecouter()
+        return true
+    }
+
+    /// « Quitter » en laissant claude tourner : on note où on en est, on lâche le processus sans l'arrêter.
+    /// Faux si la session n'a pas de claude en marche à laisser (elle se ferme alors normalement).
+    func detacherPourQuitter(_ fini: @escaping () -> Void) -> Bool {
+        guard !fermee, !dansTerminal, arretVoulu == nil, !rattrapageEnCours, let p = processus, !p.fini else { return false }
+        journal("session \(sessionId) : laissée en fond (claude pid \(p.pid) continue)")
+        p.detacher { [weak self] position in
+            DispatchQueue.main.async {
+                guard let self else { fini(); return }
+                self.ecrireVivant(p, detache: position)
+                self.ecrireEtat()          // encore visible du Cockpit et de Jarvis : le pid est vivant
+                self.fermee = true
+                self.fenetre.liberer()
+                fini()
+            }
+        }
+        return true
     }
 
     private func journalStderr(_ l: String) { journal("session \(sessionId) : stderr \(extrait(l, 300))") }
@@ -472,8 +607,10 @@ final class Session {
             .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func ligneClaude(_ l: String, _ a: Analyse?, de p: ProcessusClaude) {
-        pousser("depuisClaude", l)
+    /// `rattrapage` : ligne écrite pendant que l'app n'était pas là. Elle est déjà dans le transcript, donc pas
+    /// renvoyée à la page ; elle sert à savoir où en est claude (tour en cours, questions, dernier message).
+    private func ligneClaude(_ l: String, _ a: Analyse?, de p: ProcessusClaude, rattrapage: Bool = false) {
+        if !rattrapage { pousser("depuisClaude", l) }
         let actuel = p === processus   // suivi du processus courant seulement (pas d'un ancien qui s'arrête)
         if actuel, a == nil, l.hasPrefix("{\"type\":\"stream_event\"") { marquerTour(true) }
         guard let a else { return }
@@ -494,6 +631,7 @@ final class Session {
             RegistreSessions.shared.signaler(self)
             RegistreSessions.shared.signalerTour(self, texte: dernierMessage ?? "")
             if let n = toursAvantArret { toursAvantArret = max(0, n - 1) }
+            if actuel { p.allegerSortie() }
         }
     }
 
@@ -905,6 +1043,7 @@ final class Session {
         let finir = { [weak self] in
             guard let self else { fini?(); return }
             self.supprimerEtat()
+            try? FileManager.default.removeItem(atPath: self.dossierVivant)
             self.fenetre.liberer()
             RegistreSessions.shared.retirer(self)
             fini?()
@@ -994,7 +1133,8 @@ final class Session {
         dernierMessage = m["dernier"] as? String
         if let t = m["maj"] as? Double, t > 0 { maj = Date(timeIntervalSince1970: t) }
         let coupee = (m["etat"] as? String) == "travaille" || ((m["agents"] as? Int) ?? 0) > 0
-        if coupee, promptInitial == nil {
+        // laissée en fond exprès : elle n'a pas été coupée (rebranchement, ou travail fini en l'absence de l'app)
+        if coupee, promptInitial == nil, !laisseeEnFond {
             journal("session \(sessionId) : coupée en plein travail par la relance, reprise automatique")
             promptInitial = "Jarvis Terminal vient d'être relancé pendant que tu travaillais : ton tour a été coupé et tes agents de fond éventuels arrêtés. Reprends exactement où tu en étais, sans refaire ce qui est déjà fait."
         }

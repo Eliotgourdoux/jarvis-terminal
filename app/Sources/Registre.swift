@@ -124,12 +124,44 @@ final class RegistreSessions {
 
     /// Ferme toutes les sessions (quitter l'app) ; `fini` quand tous les processus sont arrêtés.
     func toutArreter(_ fini: @escaping () -> Void) {
+        // « Laisser tourner en fond » (réglage BTGarderEnFond, ou une seule fois pour une relance par
+        // app/relancer.sh) : les claude continuent sans l'app, qui se rebranchera dessus au prochain lancement.
+        let unefois = Reglages.d.bool(forKey: "BTGarderUneFois")
+        if unefois { Reglages.mettre(nil, "BTGarderUneFois") }
+        let garder = !PiloteDev.actif && (unefois || Reglages.d.bool(forKey: "BTGarderEnFond"))
+        journal("quitter : \(garder ? "les claude restent en fond" : "les claude sont arrêtés")")
         let groupe = DispatchGroup()
-        for s in sessions { groupe.enter(); s.arreterPourQuitter { groupe.leave() } }
+        for s in sessions {
+            groupe.enter()
+            if garder, s.detacherPourQuitter({ groupe.leave() }) { continue }
+            s.arreterPourQuitter { groupe.leave() }
+        }
         groupe.notify(queue: .main, execute: fini)
     }
 
     /// Fichiers d'état laissés par une app tuée : on retire ceux dont le processus n'existe plus.
+    /// claude laissés en fond (ProcessusClaude.swift) : on supprime les dossiers des processus morts, et on arrête
+    /// ceux qui tournent encore sans qu'aucune session ouverte ne les tienne (ils resteraient invisibles).
+    /// Appelé un moment après le lancement, quand les sessions du dernier lancement sont rouvertes.
+    static func nettoyerVivants() {
+        let racine = DOSSIER_BT + "/vivants"
+        let fm = FileManager.default
+        for id in (try? fm.contentsOfDirectory(atPath: racine)) ?? [] where Validation.sessionId(id) {
+            let d = racine + "/" + id
+            let o = (fm.contents(atPath: d + "/vivant.json")).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let pid = pid_t((o?["pid"] as? Int) ?? 0)
+            let debut = (o?["debut"] as? Double) ?? 0
+            let vivant = pid > 1 && kill(pid, 0) == 0 && ProcessusClaude.debut(pid).map { abs($0 - debut) < 0.01 } == true
+            if RegistreSessions.shared.session(id) != nil { continue }
+            if vivant {
+                journal("vivants : claude pid \(pid) de la session \(id) tourne sans session ouverte, arrêté")
+                _ = kill(-pid, SIGTERM); _ = kill(pid, SIGTERM)
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) { if ProcessusClaude.debut(pid) == debut { _ = kill(-pid, SIGKILL) } }
+            }
+            try? fm.removeItem(atPath: d)
+        }
+    }
+
     static func nettoyerEtatsOrphelins() {
         let fm = FileManager.default
         for f in (try? fm.contentsOfDirectory(atPath: DOSSIER_SESSIONS)) ?? [] where f.hasSuffix(".json") {
