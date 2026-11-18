@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         journal("lancement (pid \(getpid()), \(Bundle.main.bundlePath))")
         PiloteDev.demarrer()   // tests d'intégration seulement : ne fait rien sans BT_DEV_PILOTE
         MoteurVocal.shared.demarrer()   // mode Jarvis : raccourci global, écoute mains libres, état mémorisé
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { if !PiloteDev.actif { RegistreSessions.nettoyerVivants() } }
+        _ = LimiteUsage.shared          // file « limite » : relit ce qui attendait la reprise et arme son minuteur
         // Sessions du Victus (ssh victus ultron-terminal relais) : rien si ssh victus n'est pas configuré.
         if !PiloteDev.actif || ProcessInfo.processInfo.environment["BT_VICTUS_RELAIS"] != nil { VictusLien.shared.demarrer() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
