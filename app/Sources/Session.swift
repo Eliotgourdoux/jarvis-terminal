@@ -84,7 +84,7 @@ final class Session {
     var apercu: RegistreSessions.Apercu {
         .init(sessionId: sessionId, cwd: cwd, projet: nomAffiche, emoji: projet.emoji, etat: etat, resume: resume,
               dernierMessage: dernierMessage, modele: modele, effort: effort, pid: pid, dansTerminal: dansTerminal, maj: maj,
-              agents: agentsEnCours)
+              agents: agentsEnCours, parent: projet.parentNom)
     }
 
     init(_ d: DemandeSession) {
@@ -135,6 +135,16 @@ final class Session {
             relancer(modele: m, effort: e)
         case "ouvrirTerminal": ouvrirTerminal()
         case "ouvrirShell": ouvrirShell()
+        case "sousProjet":
+            // Sous-projet du projet de cette session (18/11/2026) : un nom d'une ligne, sans « / » ni tiret en tête.
+            let nom = ((o["nom"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let emoji = ((o["emoji"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let interdits = CharacterSet(charactersIn: "/\\:").union(.newlines).union(.controlCharacters)
+            guard !nom.isEmpty, nom.count <= 60, !nom.hasPrefix("-"), !nom.hasPrefix("."), nom.rangeOfCharacter(from: interdits) == nil,
+                  emoji.count <= 4, !emoji.hasPrefix("-"), emoji.rangeOfCharacter(from: interdits) == nil else {
+                pousser("sousProjet", ["ok": false, "erreur": "Nom invalide : une ligne, 60 caractères au plus, sans « / »."]); return
+            }
+            creerSousProjet(nom: nom, emoji: emoji)
         case "reprendreIci": reprendreIci()
         case "fermer": fenetre.fermerFenetre()
         case "copier":
@@ -295,6 +305,7 @@ final class Session {
 
     private func info() -> [String: Any] {
         ["cwd": cwd, "projet": nomAffiche, "emoji": projet.emoji, "sessionId": sessionId,
+         "parent": projet.parentNom ?? NSNull(), "sousProjets": projet.id != nil,
          "modele": modele ?? NSNull(), "effort": effort ?? NSNull(),
          "effortDefaut": EffortReglages.valeur(cwd: cwd) ?? NSNull(),
          "reprise": repriseDemandee, "dansTerminal": dansTerminal,
@@ -893,6 +904,31 @@ final class Session {
     /// Bouton « Terminal » (09/11/2026) : une fenêtre Terminal.app dans le dossier du projet, pour taper des
     /// commandes à côté. La session Claude continue dans l'app. `open -a Terminal <dossier>` : aucune commande
     /// à échapper, aucune autorisation d'automatisation.
+    /// Crée le sous-projet par `todo nouveau --parent` (dossier, CLAUDE.md, registre, to-do), puis y ouvre une session.
+    private func creerSousProjet(nom: String, emoji: String) {
+        guard let parent = projet.id else {
+            pousser("sousProjet", ["ok": false, "erreur": "Ce dossier n'est pas un projet du registre."]); return
+        }
+        var args = ["nouveau", nom, "--parent", parent]
+        if !emoji.isEmpty { args += ["--emoji", emoji] }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let r = TodoProjet.lancer(args, delai: 30)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard r.code == 0, let chemin = RegistreProjets.cheminSousProjet(nom: nom, parent: parent) else {
+                    let e = r.delaiDepasse ? "La création a pris trop de temps." : r.erreur.trimmingCharacters(in: .whitespacesAndNewlines)
+                    journal("session \(self.sessionId) : sous-projet « \(nom) » refusé (code \(r.code)) \(e.prefix(200))")
+                    self.pousser("sousProjet", ["ok": false, "erreur": e.isEmpty ? "Création impossible." : String(e.replacingOccurrences(of: "todo : ", with: "").prefix(160))])
+                    return
+                }
+                journal("session \(self.sessionId) : sous-projet « \(nom) » créé dans \(chemin)")
+                self.pousser("sousProjet", ["ok": true, "nom": nom])
+                // chemin réel (liens résolus), comme pour toute session : c'est lui que le registre reconnaît
+                if let reel = Validation.dossier(chemin), let d = Entrees.demande(cwd: reel, resume: nil, prompt: nil, modele: nil, effort: nil) { Entrees.ouvrir(d) }
+            }
+        }
+    }
+
     private func ouvrirShell() {
         var dossier: ObjCBool = false
         guard FileManager.default.fileExists(atPath: cwd, isDirectory: &dossier), dossier.boolValue else {

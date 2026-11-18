@@ -129,6 +129,7 @@ enum TodoProjet {
     static func lancer(_ args: [String], delai: TimeInterval) -> Resultat {
         var env = Environnement.propre(ProcessInfo.processInfo.environment)
         env["LANG"] = env["LANG"] ?? "fr_FR.UTF-8"
+        if let r = PiloteDev.registre { env["TODO_REGISTRE"] = r }   // essais : jamais le vrai registre
 
         var tOut: [Int32] = [-1, -1], tErr: [Int32] = [-1, -1]
         guard pipe(&tOut) == 0 else { return Resultat(code: -1, sortie: "", erreur: "pipe impossible", delaiDepasse: false) }

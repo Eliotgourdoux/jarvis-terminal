@@ -88,6 +88,9 @@ html.dev .faux-feux i:nth-child(3) { background: #28C840; }
 .emoji { flex: none; font-size: 14px; line-height: 1; }
 .projet { flex: 1; min-width: 0; font: 600 14.5px var(--police-titre); color: var(--texte-fort); letter-spacing: .005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dossier { font-weight: 400; color: var(--faint); }
+/* Sous-projet : rappel du projet parent, léger retrait */
+.sous-projet { margin-left: 12px; }
+.parent { margin-bottom: 2px; font: 600 10px var(--police); letter-spacing: .08em; text-transform: uppercase; color: var(--or); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .raccourci { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .fermer {
   flex: none; display: none; width: 20px; height: 20px; padding: 0; margin: -2px -4px -2px 0; place-items: center;

@@ -90,6 +90,7 @@
     todo: function (d) { if (BT.todo) BT.todo.recevoir(d); },
     agents: function (l) { if (app.agents) app.agents.recevoir(l); },
     limite: function (d) { session.definirLimite(d); },
+    sousProjet: function (d) { if (BT.sousProjetReponse) BT.sousProjetReponse(d); },
     titre: function (t) { if (typeof t === 'string' && t) { session.info.projet = t; app.interface._majNom(t); } },
     vocalDirect: function (d) { if (app.vocalDirect) app.vocalDirect.recevoir(d); },
     vocalEtape: function (d) { if (BT.apercuEtape) BT.apercuEtape(d); },

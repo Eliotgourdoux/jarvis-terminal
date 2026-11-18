@@ -44,7 +44,32 @@
     // Terminal : deux boutons. Ouvrir un shell dans le dossier (Claude continue ici), ou passer la session au terminal.
     // Menu « ⋯ » (12/11/2026, Eliot ne comprenait pas les trois icônes) : terminal ici, continuer dans Terminal, fermer.
     var btSession = $('bt-session'), menuSession = $('menu-session');
+    // Nouveau sous-projet (18/11/2026) : le menu laisse place à un petit formulaire, la coque crée le dossier,
+    // l'entrée du registre et la to-do, puis ouvre une session dans le sous-projet.
+    var spForm = $('sous-projet'), spNom = $('sous-projet-nom'), spEmoji = $('sous-projet-emoji'),
+        spErreur = $('sous-projet-erreur'), spCreer = $('sous-projet-creer');
+    function formulaireSousProjet(o) {
+      spForm.hidden = !o;
+      Array.prototype.forEach.call(menuSession.children, function (c) { if (c !== spForm) c.classList.toggle('masque', o); });
+      spErreur.hidden = true; spCreer.disabled = false; spCreer.textContent = 'Créer';
+      if (o) { spNom.value = ''; spEmoji.value = ''; spNom.focus(); }
+    }
+    $('bt-sous-projet').addEventListener('click', function (e) { e.stopPropagation(); formulaireSousProjet(true); });
+    $('sous-projet-annuler').addEventListener('click', function () { formulaireSousProjet(false); });
+    spForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var nom = spNom.value.trim();
+      if (!nom) { spNom.focus(); return; }
+      spCreer.disabled = true; spCreer.textContent = 'Création…'; spErreur.hidden = true;
+      BT.pont.envoyer('sousProjet', { nom: nom, emoji: spEmoji.value.trim() });
+    });
+    BT.sousProjetReponse = function (d) {
+      if (d && d.ok) { menuOuvert(false); return; }
+      spCreer.disabled = false; spCreer.textContent = 'Créer';
+      spErreur.textContent = (d && d.erreur) || 'Création impossible.'; spErreur.hidden = false;
+    };
     function menuOuvert(o) {
+      if (!o && !spForm.hidden) formulaireSousProjet(false);
       menuSession.hidden = !o;
       btSession.classList.toggle('actif', o);
       btSession.setAttribute('aria-expanded', String(o));
@@ -138,6 +163,7 @@
     $('barre-cwd').title = info.cwd || '';
     document.title = (info.emoji ? info.emoji + ' ' : '') + nom;
     $('titre-fenetre').textContent = (cheminCourt(info.cwd) || nom) + (info.dansTerminal ? ' — dans le Terminal' : '');
+    $('bt-sous-projet').hidden = !info.sousProjets;   // seulement dans un projet du registre
     // Bande native de la coque : 28 px en haut pour déplacer la fenêtre, 78 px à gauche pour les feux.
     var bt = info.barreTitre || {};
     var racine = document.documentElement.style;

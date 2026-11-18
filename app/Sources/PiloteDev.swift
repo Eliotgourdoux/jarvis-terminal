@@ -11,7 +11,7 @@ import WebKit
 ///   en fin de document. Sert à taper un message avant même que claude soit lancé.
 /// - `<nom>.cmd.json` déposés dans le dossier : exécutés un par un (ordre des noms), résultat écrit dans
 ///   `<nom>.res.json`. Actions : `fenetres`, `js` {fenetre, code}, `touche` {fenetre, touche, mods},
-///   `recharger` {fenetre} (comme ⌘R), `quitter` (⌘Q fabriqué). `fenetre` = index (0, 1…) ou début du sessionId ; absent = dernière fenêtre ouverte.
+///   `recharger` {fenetre} (comme ⌘R), `capture` {chemin, cible} (PNG de la vue web réelle), `quitter` (⌘Q fabriqué). `fenetre` = index (0, 1…) ou début du sessionId ; absent = dernière fenêtre ouverte.
 /// - Les touches sont des NSEvent fabriqués et remis à l'app elle-même (NSApp.sendEvent) : rien ne passe
 ///   par le système, rien ne peut atterrir dans une autre application.
 /// - En mode pilote, aucune notification Mac n'est envoyée (journalisée à la place).
@@ -108,6 +108,13 @@ enum PiloteDev {
             d.resume = cmd["resume"] as? String
             Entrees.ouvrir(d)
             fini(["ok": true])
+        case "capture":
+            // {chemin, cible: "barre" | absent (fenêtre de session)} : PNG de la vue web réelle.
+            guard let c = cmd["chemin"] as? String, c.hasPrefix("/"), c.hasSuffix(".png") else { fini(["erreur": "chemin .png absolu attendu"]); return }
+            let rendu: (Bool, Any) -> Void = { ok, v in fini(ok ? ["ok": true, "valeur": v] : ["ok": false, "erreur": v]) }
+            if cmd["cible"] as? String == "barre" { FenetrePrincipale.shared.capturerDev(c, rendu) }
+            else if let s = session(cmd) { s.vueDev.capturerDev(c, rendu) }
+            else { fini(["erreur": "fenêtre absente"]) }
         case "barre":
             guard let code = cmd["code"] as? String else { fini(["erreur": "code absent"]); return }
             FenetrePrincipale.shared.evaluerBarreDev(code) { ok, v in fini(ok ? ["ok": true, "valeur": v] : ["ok": false, "erreur": v]) }

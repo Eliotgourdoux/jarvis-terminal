@@ -197,7 +197,8 @@ enum BinaireClaude {
 
 // MARK: - Registre des projets (~/.config/projets/registry.json)
 
-struct InfoProjet { let nom: String; let emoji: String; var id: String? = nil }
+/// `parent` : pour un sous-projet (champ `parent` du registre), l'identifiant et le nom du projet qui le contient.
+struct InfoProjet { let nom: String; let emoji: String; var id: String? = nil; var chemin: String? = nil; var parentId: String? = nil; var parentNom: String? = nil }
 
 enum RegistreProjets {
     /// Tests seulement : `BT_DEV_REGISTRE` (pilote actif) remplace le registre, pour donner des noms de
@@ -209,20 +210,33 @@ enum RegistreProjets {
         if cwd == cheminReel(Entrees.dossierDiscussions) { return InfoProjet(nom: "Discussion", emoji: "") }   // pas d'emoji (Eliot, 17/11/2026)
         guard let d = FileManager.default.contents(atPath: chemin),
               let liste = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return defaut }
-        let projets: [(chemin: String, nom: String, emoji: String, id: String?)] = liste.compactMap {
+        typealias P = (chemin: String, nom: String, emoji: String, id: String?, parent: String?)
+        let projets: [P] = liste.compactMap {
             guard let c = $0["chemin"] as? String, !c.isEmpty else { return nil }
-            return (cheminReel((c as NSString).expandingTildeInPath), $0["nom"] as? String ?? "", $0["emoji"] as? String ?? "", $0["id"] as? String)
+            return (cheminReel((c as NSString).expandingTildeInPath), $0["nom"] as? String ?? "", $0["emoji"] as? String ?? "", $0["id"] as? String, $0["parent"] as? String)
         }
-        func vers(_ p: (chemin: String, nom: String, emoji: String, id: String?)) -> InfoProjet {
-            InfoProjet(nom: p.nom.isEmpty ? defaut.nom : p.nom, emoji: p.emoji.isEmpty ? defaut.emoji : p.emoji, id: p.id)
+        func vers(_ p: P) -> InfoProjet {
+            let pere = p.parent.flatMap { id in projets.first { $0.id == id } }
+            return InfoProjet(nom: p.nom.isEmpty ? defaut.nom : p.nom, emoji: p.emoji.isEmpty ? defaut.emoji : p.emoji, id: p.id,
+                              chemin: p.chemin, parentId: pere?.id, parentNom: pere.map { $0.nom })
         }
         if let p = projets.first(where: { $0.chemin == cwd }) { return vers(p) }
         // Sous-dossier d'un projet. Les dossiers « parents » d'autres projets (home, ~/Desktop/Projets)
         // ne captent que leur propre chemin, comme dans Cockpit.
-        let parents = Set(projets.map(\.chemin).filter { c in projets.contains { $0.chemin.hasPrefix(c + "/") } })
+        // Un projet dont tous les projets imbriqués sont des sous-projets déclarés (champ `parent`) n'est pas un
+        // simple dossier parent : il garde ses autres sous-dossiers (18/11/2026).
+        let parents = Set(projets.map(\.chemin).filter { c in projets.contains { $0.chemin.hasPrefix(c + "/") && $0.parent == nil } })
         if let p = projets.filter({ !parents.contains($0.chemin) && cwd.hasPrefix($0.chemin + "/") })
             .max(by: { $0.chemin.count < $1.chemin.count }) { return vers(p) }
         return defaut
+    }
+
+    /// Dossier du sous-projet `nom` du projet `parent`, une fois créé par `todo nouveau --parent`.
+    static func cheminSousProjet(nom: String, parent: String) -> String? {
+        guard let d = FileManager.default.contents(atPath: chemin),
+              let liste = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return nil }
+        let c = liste.first { ($0["parent"] as? String) == parent && ($0["nom"] as? String) == nom }?["chemin"] as? String
+        return (c?.isEmpty ?? true) ? nil : c
     }
 }
 

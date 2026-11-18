@@ -146,6 +146,11 @@
       if (d.actif) { item.classList.add('actif'); item.setAttribute('aria-current', 'true'); }
       if (e.cle === 'attend') item.classList.add('attend');
 
+      // Sous-projet : le nom du projet parent au-dessus, et un retrait quand le parent est juste avant dans la liste.
+      if (d.parent) {
+        item.classList.add('sous-projet');
+        item.appendChild(el('div', 'parent', String(d.parent) + ' ›'));
+      }
       var l1 = el('div', 'ligne1');
       if (d.emoji) l1.appendChild(el('span', 'emoji', d.emoji));
       var nom = el('span', 'projet', d.projet || 'Session');

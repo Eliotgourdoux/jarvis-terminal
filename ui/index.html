@@ -47,6 +47,19 @@
       <button type="button" id="bt-shell" class="menu-item" role="menuitem"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4.5 6.5 6.8 8.5 4.5 10.5M8.5 10.5h3"/></svg><span class="menu-textes"><span class="libelle">Ouvrir un terminal ici</span><span class="menu-aide">Dans le dossier du projet. Claude continue dans l’app.</span></span></button>
       <button type="button" id="bt-reprendre-menu" class="menu-item" role="menuitem" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3"/></svg><span class="menu-textes"><span class="libelle">Reprendre ici</span><span class="menu-aide">Arrête Claude dans Terminal et reprend la même conversation dans l’app.</span></span></button>
       <button type="button" id="bt-terminal" class="menu-item" role="menuitem"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg><span class="menu-textes"><span class="libelle">Continuer dans Terminal</span><span class="menu-aide">Claude quitte l’app et reprend la même conversation dans Terminal.</span></span></button>
+      <button type="button" id="bt-sous-projet" class="menu-item" role="menuitem" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1zM8 7.6v3.4M6.3 9.3h3.4"/></svg><span class="menu-textes"><span class="libelle">Nouveau sous-projet</span><span class="menu-aide">Un sous-dossier de ce projet, avec sa propre to-do. Une session s’y ouvre.</span></span></button>
+      <form id="sous-projet" class="sous-projet" hidden autocomplete="off">
+        <div class="sous-projet-titre">Nouveau sous-projet</div>
+        <div class="sous-projet-champs">
+          <input id="sous-projet-emoji" class="sous-projet-emoji" type="text" maxlength="4" placeholder="📁" aria-label="Emoji du sous-projet">
+          <input id="sous-projet-nom" class="sous-projet-nom" type="text" maxlength="60" placeholder="Nom du sous-projet" aria-label="Nom du sous-projet">
+        </div>
+        <div id="sous-projet-erreur" class="sous-projet-erreur" role="alert" hidden></div>
+        <div class="sous-projet-actions">
+          <button type="button" id="sous-projet-annuler" class="sous-projet-bouton">Annuler</button>
+          <button type="submit" id="sous-projet-creer" class="sous-projet-bouton principal">Créer</button>
+        </div>
+      </form>
       <div class="menu-sep" role="separator"></div>
       <button type="button" id="bt-fermer" class="menu-item fermer" role="menuitem"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><span class="menu-textes"><span class="libelle">Fermer la session</span><span class="menu-aide">Arrête Claude et ferme la fenêtre.</span></span></button>
     </div>

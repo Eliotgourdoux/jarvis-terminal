@@ -301,7 +301,15 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     private func ordre() -> [Entree] {
         let mac = vues.filter { !$0.estVictus && !($0.sessionLiee?.estFermee ?? true) }
         let distantes = vues.filter(\.estVictus)
-        var o: [Entree] = mac.map { .vue($0) }
+        // Les sous-projets viennent juste sous leur projet parent quand il est ouvert (18/11/2026).
+        var range: [FenetreSession] = []
+        for v in mac where v.sessionLiee?.projet.parentId == nil || !mac.contains(where: { $0.sessionLiee?.projet.id == v.sessionLiee?.projet.parentId }) {
+            range.append(v)
+            if let id = v.sessionLiee?.projet.id, !range.dropLast().contains(where: { $0.sessionLiee?.projet.id == id }) {
+                range += mac.filter { $0.sessionLiee?.projet.parentId == id }
+            }
+        }
+        var o: [Entree] = range.map { .vue($0) }
         var vus = Set<String>()
         for s in VictusLien.shared.sessions {
             guard let id = (s["id"] as? String)?.lowercased(), vus.insert(id).inserted else { continue }
@@ -367,7 +375,7 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
                             "etat": a.etat, "resume": a.resume ?? NSNull(), "dernierMessage": a.dernierMessage ?? NSNull(),
                             "modele": a.modele ?? NSNull(), "dansTerminal": a.dansTerminal,
                             "maj": a.maj.timeIntervalSince1970 * 1000, "actif": selection === v, "nonLu": nonLues.contains(a.sessionId),
-                            "agents": a.agents, "machine": "mac",
+                            "agents": a.agents, "machine": "mac", "parent": a.parent ?? NSNull(),
                             "limite": LimiteUsage.shared.attente(a.sessionId).map { ["reprise": $0.reprise.timeIntervalSince1970 * 1000, "messages": $0.messages] as [String: Any] } ?? NSNull()]
                 }
                 guard let d = v.distante else { return nil }
@@ -524,6 +532,19 @@ final class FenetrePrincipale: NSObject, NSWindowDelegate, WKNavigationDelegate 
     func webViewWebContentProcessDidTerminate(_ w: WKWebView) { barrePrete = false; w.reload() }
 
     /// Pilote de développement uniquement (BT_DEV_PILOTE).
+
+    /// Pilote : image PNG de la vue web telle qu'elle est rendue dans la fenêtre (taille réelle), pour vérifier
+    /// un changement visible sans capture d'écran du système.
+    func capturerDev(_ chemin: String, _ fini: @escaping (Bool, Any) -> Void) {
+        guard PiloteDev.actif, let barre else { fini(false, "pilote inactif ou vue absente"); return }
+        barre.takeSnapshot(with: nil) { image, erreur in
+            guard let tiff = image?.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { fini(false, erreur?.localizedDescription ?? "capture impossible"); return }
+            do { try png.write(to: URL(fileURLWithPath: chemin)); fini(true, ["largeur": rep.pixelsWide, "hauteur": rep.pixelsHigh]) }
+            catch { fini(false, error.localizedDescription) }
+        }
+    }
+
     func evaluerBarreDev(_ code: String, _ fini: @escaping (Bool, Any) -> Void) {
         guard PiloteDev.actif, let barre else { fini(false, "pilote inactif ou pas de barre"); return }
         barre.callAsyncJavaScript(code, arguments: [:], in: nil, in: .page) { r in

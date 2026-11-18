@@ -156,6 +156,7 @@ cd app/bac-a-sable && TG_DRY=1 TG_API_BASE=http://127.0.0.1:9 BT_DEV_PILOTE=/che
   - `js` `{fenetre, code}` : un corps de fonction exécuté dans la page ;
   - `touche` `{fenetre, touche, mods}` : un NSEvent fabriqué et remis à l'app elle-même par `NSApp.sendEvent`. Rien ne passe par le système, rien ne peut atterrir dans une autre application ;
   - `recharger` : comme ⌘R ;
+  - `capture` `{chemin, cible}` : PNG de la vue web réelle, à sa taille dans la fenêtre (`cible: "barre"` pour la barre des sessions). À utiliser pour vérifier tout changement visible ;
   - `quitter` : un ⌘Q fabriqué.
 - `injecte.js`, s'il existe dans le dossier quand une fenêtre est créée, est ajouté à la page en fin de document. Il sert à taper un message avant même le lancement de claude.
 - En mode pilote, les choses changent ainsi :
@@ -198,3 +199,12 @@ Les points suivants n'ont pas été vérifiés :
 - La reprise après la mort du processus WebKit.
 
 Les captures `screencapture -l` montrent la fenêtre seule, sans le bureau derrière : le verre y apparaît gris uni.
+
+## Sous-projets (18/11/2026)
+
+Un sous-projet est un projet du registre dont le dossier est dans celui d'un autre projet, avec le champ `parent` (identifiant du projet parent). Il a son nom, son emoji, sa to-do et son `CLAUDE.md`.
+
+- **Création** : menu « ⋯ » d'une session → « Nouveau sous-projet » (visible seulement dans un projet du registre). La page envoie `sousProjet {nom, emoji}` ; la coque lance `todo nouveau "<nom>" --parent <id>` (`Session.creerSousProjet`), répond par `bt.sousProjet({ok, nom})` ou `{ok: false, erreur}`, puis ouvre une session dans le nouveau dossier. Depuis un terminal ou une session : la même commande `todo nouveau … --parent …`.
+- **Barre des sessions** : une session de sous-projet porte `parent` (nom du projet parent), affiché au-dessus de son nom ; elle est rangée juste sous la session du parent quand celle-ci est ouverte (`FenetrePrincipale.ordre`).
+- **Attribution** : un projet dont tous les projets imbriqués déclarent `parent` garde ses autres sous-dossiers (`RegistreProjets.info`). Sans `parent`, l'ancien comportement reste : le dossier contenant ne capte que son propre chemin.
+- **Essai sans toucher au vrai registre** : `BT_DEV_REGISTRE` (pilote) est transmis à `todo` par `TODO_REGISTRE`.

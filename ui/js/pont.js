@@ -72,6 +72,8 @@
     limite: appel('limite'),
     // Titre d'une discussion (généré par Claude après le premier échange) : barre du haut et titre de page.
     titre: appel('titre'),
+    // Réponse à la création d'un sous-projet (menu « ⋯ ») : { ok, nom } ou { ok: false, erreur }.
+    sousProjet: appel('sousProjet'),
     // Sessions du Victus (victus/CONTRAT-VICTUS.md) : texte confié par le démon, message tapé sur une autre page.
     texteAEnvoyer: appel('texteAEnvoyer'),
     utilisateurAilleurs: appel('utilisateurAilleurs')

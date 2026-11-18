@@ -207,6 +207,19 @@ final class FenetreSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     /// Pilote de développement uniquement (PiloteDev, actif seulement avec BT_DEV_PILOTE).
+
+    /// Pilote : image PNG de la vue web telle qu'elle est rendue dans la fenêtre (taille réelle), pour vérifier
+    /// un changement visible sans capture d'écran du système.
+    func capturerDev(_ chemin: String, _ fini: @escaping (Bool, Any) -> Void) {
+        guard PiloteDev.actif, !libere else { fini(false, "pilote inactif ou vue absente"); return }
+        web.takeSnapshot(with: nil) { image, erreur in
+            guard let tiff = image?.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { fini(false, erreur?.localizedDescription ?? "capture impossible"); return }
+            do { try png.write(to: URL(fileURLWithPath: chemin)); fini(true, ["largeur": rep.pixelsWide, "hauteur": rep.pixelsHigh]) }
+            catch { fini(false, error.localizedDescription) }
+        }
+    }
+
     func evaluerDev(_ code: String, _ fini: @escaping (Bool, Any) -> Void) {
         guard PiloteDev.actif, !libere else { fini(false, "pilote inactif ou fenêtre libérée"); return }
         web.callAsyncJavaScript(code, arguments: [:], in: nil, in: .page) { r in

@@ -23,6 +23,7 @@ final class RegistreSessions {
         let dansTerminal: Bool
         let maj: Date
         let agents: Int
+        var parent: String? = nil   // nom du projet parent, pour un sous-projet
     }
 
     func ajouter(_ s: Session) { sessions.append(s); signaler(s); memoriser() }

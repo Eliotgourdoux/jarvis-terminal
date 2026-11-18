@@ -1723,7 +1723,8 @@
       projet: this.info.projet || '', emoji: this.info.emoji || '', cwd: this.info.cwd || (this.init && this.init.cwd) || '',
       sessionId: this.sessionId || this.info.sessionId || '', modele: this.valeurModele(), modeleResolu: this.modeleResolu || '',
       effort: this.effort || '', effortDefaut: this.info.effortDefaut || '', modeles: this.modeles, permissionMode: this.permission || (this.init ? this.init.permissionMode : '') || '',
-      dansTerminal: !!this.dansTerminal, barreTitre: this.info.barreTitre || null, reprise: !!this.info.reprise
+      dansTerminal: !!this.dansTerminal, barreTitre: this.info.barreTitre || null, reprise: !!this.info.reprise,
+      sousProjets: !!this.info.sousProjets, parent: this.info.parent || ''
     };
   };
 
