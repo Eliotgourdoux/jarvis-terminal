@@ -177,21 +177,27 @@
       apparaitre(w.el, retard);
       return true;
     }
+    /* Whisper retranscrit tout depuis le début à chaque passe : un mot du début peut changer (ponctuation,
+     * accord). Les mots déjà affichés sont donc corrigés sur place, à leur position, sans jamais être retirés
+     * puis réécrits (18/11/2026, Eliot : « voir les caractères se mettre à jour mais pas réécrire la même ligne »).
+     * Seuls les mots en plus, à la fin, arrivent un par un. */
     function afficherMots(t, final) {
-      var B = mots(t), n = 0, i;
+      var B = mots(t), i;
       clearInterval(tic); tic = 0;
-      while (n < affiches.length && n < B.length && affiches[n].cle === cle(B[n])) n++;
+      var n = Math.min(affiches.length, B.length);
       for (i = 0; i < n; i++) {
         if (affiches[i].texte === B[i]) continue;
         affiches[i].texte = B[i];
+        affiches[i].cle = cle(B[i]);
         affiches[i].el.textContent = (i ? ' ' : '') + B[i];
-        fondre(affiches[i].el);
+        if (final) fondre(affiches[i].el);
       }
+      // texte plus court que ce qui est affiché : la fin en trop part d'un coup
       for (i = n; i < affiches.length; i++) affiches[i].el.remove();
       affiches.length = n;
       file = B.slice(n).map(function (m) { return { texte: m, cle: cle(m) }; });
       if (final || reduit() || document.hidden) {
-        // texte final : tout d'un coup, avec un léger décalage de mot en mot plutôt qu'un bloc
+        // texte final : la suite d'un coup, avec un léger décalage de mot en mot plutôt qu'un bloc
         var r = 0, decale = final && !reduit();
         while (poser(decale ? Math.min(r++, 12) * 28 : 0)) { /* tous les mots */ }
         return;
