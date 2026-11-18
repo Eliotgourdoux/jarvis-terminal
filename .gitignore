@@ -1,0 +1,22 @@
+# produits de compilation
+app/build/
+app/.build/
+__pycache__/
+
+# sauvegardes et fichiers système
+*.bak
+*.bak-*
+*.tmp
+.DS_Store
+Icon?
+
+# captures, vidéos de démo, graphe de code, réglages locaux
+ui/captures/
+app/captures/
+video-demo/
+graphify-out/
+.claude/
+
+# journaux d'essai du moteur et copie de lecture du SDK
+moteur/journal/
+moteur/lecture-sdk/
