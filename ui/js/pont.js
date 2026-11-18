@@ -68,6 +68,8 @@
     todo: appel('todo'),
     // Sous-agents en cours (js/agents.js ↔ app/Sources/SuiviAgents.swift).
     agents: appel('agents'),
+    // File « limite » (js/limite.js ↔ app/Sources/LimiteUsage.swift) : messages gardés jusqu'à la reprise.
+    limite: appel('limite'),
     // Titre d'une discussion (généré par Claude après le premier échange) : barre du haut et titre de page.
     titre: appel('titre'),
     // Sessions du Victus (victus/CONTRAT-VICTUS.md) : texte confié par le démon, message tapé sur une autre page.

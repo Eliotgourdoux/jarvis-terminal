@@ -728,6 +728,59 @@
     if (f.cinqH || f.semaine) this._releveQuota(f);
   };
 
+  /* File « limite » (js/limite.js, LimiteUsage.swift) : état poussé par la coque, seule à décider.
+   * d = { reprise (ms) | null, retient, coupee, auto, attente: [{ uuid, texte }], perdus: [uuid], total }.
+   * Un message gardé a sa bulle marquée `retenu` ; quand il quitte la liste, c'est qu'il vient de partir
+   * (ou, s'il est dans `perdus`, qu'il n'a pas pu partir : claude est arrêté). */
+  Session.prototype.definirLimite = function (d) {
+    d = d && typeof d === 'object' ? d : {};
+    var self = this, attente = Array.isArray(d.attente) ? d.attente : [], parUuid = {}, perdus = {}, partis = 0, gardeApres = null;
+    this.limite = { reprise: typeof d.reprise === 'number' ? d.reprise : null, retient: !!d.retient, coupee: !!d.coupee,
+      auto: !!d.auto, attente: attente, total: d.total || 0 };
+    attente.forEach(function (a) { if (a && a.uuid) parUuid[a.uuid] = a; });
+    (Array.isArray(d.perdus) ? d.perdus : []).forEach(function (u) { perdus[u] = true; });
+    this.items.forEach(function (it) {
+      if (it.genre !== 'eliot') return;
+      var garde = !!(it.uuid && parUuid[it.uuid]);
+      if (garde) delete parUuid[it.uuid];
+      if (it.uuid && perdus[it.uuid] && !it.retire) { it.retire = true; it.retenu = false; self._maj(it, 'retenu'); return; }
+      if (!!it.retenu === garde) return;
+      if (it.retenu && !garde && !it.retire) partis++;
+      if (!it.retenu && garde) gardeApres = it;
+      it.retenu = garde;
+      self._maj(it, 'retenu');
+    });
+    // gardés avant une relance de l'app : absents du transcript, leur bulle est recréée
+    Object.keys(parUuid).forEach(function (u) {
+      var it = self._ajouter({ genre: 'eliot', texte: String(parUuid[u].texte || ''), enFile: false, source: '',
+        commande: false, retenu: true });
+      it.uuid = u;
+    });
+    if (partis) this._debutTravail();
+    // La coque a gardé un message que la page croyait parti : si rien n'est venu depuis, Claude ne travaille pas.
+    else if (gardeApres && this.travaille && this.items[this.items.length - 1] === gardeApres) {
+      this.travaille = false; this.debutTravail = null;
+      this._definirActivite('');
+      this._calculerEtat();
+    }
+    this.emit('limite', this.limite);
+  };
+
+  /* Eliot vide la pile de cette session : les bulles restent, marquées « retiré », rien ne partira. */
+  Session.prototype.viderLimite = function () {
+    var self = this;
+    this.items.forEach(function (it) {
+      if (it.genre === 'eliot' && it.retenu) { it.retire = true; self._maj(it, 'retenu'); }
+    });
+    this._envoyer('limite', { action: 'vider' });
+  };
+
+  /* La coque garde-t-elle les messages de cette session jusqu'à la reprise ? */
+  Session.prototype.limiteActive = function () {
+    var l = this.limite;
+    return !!(l && l.retient);
+  };
+
   /* ================= Requêtes de contrôle ================= */
 
   Session.prototype._ecrire = function (obj) {
@@ -1292,12 +1345,16 @@
     if ((!texte.trim() && !images.length && !fichiers.length) || this.termine) return null;
     // /compact : pas de bulle, l'élément « Compaction de la conversation » (barre de progression) la remplace.
     var compact = /^\/compact(\s+([\s\S]*))?$/.exec(texte.trim());
+    // Limite d'usage atteinte : la coque garde le message et l'écrit à la reprise (pas de tour ouvert ici).
+    var retenu = this.limiteActive();
+    if (retenu) compact = null;
     var it = compact && !images.length && !fichiers.length
       ? this._compaction({ etat: 'encours', consigne: (compact[2] || '').trim() })
       : this._ajouter({
       fichiers: fichiers.length ? fichiers.map(function (f) { return { chemin: f.chemin, nom: f.nom, taille: f.taille, dossier: f.dossier }; }) : null,
-      genre: 'eliot', texte: texte, enFile: this.travaille, source: source || '', commande: /^\/[^\s/]/.test(texte),
-      images: images.length ? images.map(function (i) { return 'data:' + i.type + ';base64,' + i.donnees; }) : null
+      genre: 'eliot', texte: texte, enFile: this.travaille && !retenu, source: source || '', commande: /^\/[^\s/]/.test(texte),
+      images: images.length ? images.map(function (i) { return 'data:' + i.type + ';base64,' + i.donnees; }) : null,
+      retenu: retenu
     });
     var contenu = images.map(function (i) { return { type: 'image', source: { type: 'base64', media_type: i.type, data: i.donnees } }; });
     var envoi = texte.trim();
@@ -1310,7 +1367,7 @@
     var uuid = BT.uuid();
     if (it) it.uuid = uuid;
     this._ecrire({ type: 'user', uuid: uuid, session_id: '', message: { role: 'user', content: contenu }, parent_tool_use_id: null });
-    this._debutTravail();
+    if (!retenu) this._debutTravail();
     return it;
   };
 

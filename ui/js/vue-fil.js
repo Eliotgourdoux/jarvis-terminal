@@ -310,6 +310,12 @@
     else if (it.source === 'vocal') t.unshift('dicté à Jarvis');
     else if (it.source && it.source !== 'mac') t.unshift('envoyé par ' + it.source);
     if (it.enFile) t.push('ajouté pendant le travail');
+    if (it.retire) t.push('retiré, pas envoyé');
+    else if (it.retenu) {
+      var l = this.s.limite;
+      t.push('partira à la reprise' + (l && l.reprise ? ', ' + BT.heure(l.reprise) : ''));
+    }
+    n.classList.toggle('bulle-retenue', !!(it.retenu || it.retire));
     var texte = t.filter(Boolean).join(' · ');
     if (it.source === 'vocal' && BT.icone) meta.replaceChildren(BT.icone('micro', 'icone-meta'), document.createTextNode(texte));
     else meta.textContent = texte;

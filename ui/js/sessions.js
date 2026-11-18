@@ -52,6 +52,12 @@
     if (d.etat === 'attend') return { cle: 'attend', texte: 'Claude t’attend' };
     if (d.etat === 'travaille') return { cle: 'travaille', texte: 'Travaille…' };
     if (d.etat === 'termine') return { cle: 'termine', texte: 'Terminée' };
+    // coupée par la limite d'usage, ou messages gardés : elle repart toute seule à l'heure dite
+    if (d.limite && d.limite.reprise) {
+      var hr = new Date(d.limite.reprise), nm = d.limite.messages || 0;
+      return { cle: 'nonlu', texte: 'Reprend à ' + (hr.getHours() < 10 ? '0' : '') + hr.getHours() + ':' + (hr.getMinutes() < 10 ? '0' : '') + hr.getMinutes() +
+        (nm ? ' · ' + nm + (nm > 1 ? ' messages' : ' message') : '') };
+    }
     // tour fini mais agents de fond encore au travail : la session n'est pas vraiment « prête »
     if (d.agents > 0) return { cle: 'travaille', texte: d.agents > 1 ? d.agents + ' agents au travail…' : 'Un agent au travail…' };
     if (d.nonLu) return { cle: 'nonlu', texte: 'Réponse prête' };
@@ -310,7 +316,24 @@
     if (!menu.hidden && !menu.contains(ev.target) && !ev.target.closest('#nouvelle, #nouvelle-vide')) fermerMenu();
   });
 
+  // « Quitter » : arrêter les claude ou les laisser tourner en fond (réglage tenu par la coque).
+  var choixFond = document.querySelectorAll('#fond [data-fond]'), fondActif = false;
+  function rendreFond() {
+    Array.prototype.forEach.call(choixFond, function (b) {
+      b.setAttribute('aria-checked', (b.dataset.fond === '1') === fondActif ? 'true' : 'false');
+    });
+  }
+  Array.prototype.forEach.call(choixFond, function (b) {
+    b.addEventListener('click', function () {
+      var v = b.dataset.fond === '1';
+      if (v === fondActif) return;
+      fondActif = v; rendreFond();
+      envoyer({ type: 'garderEnFond', actif: fondActif });
+    });
+  });
+
   window.barreSessions = {
+    fond: function (d) { fondActif = !!(d && d.actif); rendreFond(); },
     maj: function (l, j, m) {
       donnees = Array.isArray(l) ? l : [];
       jarvis = j && typeof j === 'object' ? j : null;
@@ -450,6 +473,8 @@
   }
 
   boutonDisc.addEventListener('click', function () { if (pDisc.hidden) ouvrirDiscussions(); else fermerDiscussions(); });
+  // Double clic sur l'icône : nouvelle discussion directement (Eliot, 18/11/2026).
+  boutonDisc.addEventListener('dblclick', function (e) { e.preventDefault(); fermerDiscussions(); envoyer({ type: 'discussion' }); });
   document.getElementById('discussions-fermer').addEventListener('click', fermerDiscussions);
   document.getElementById('discussion-neuve').addEventListener('click', function () { fermerDiscussions(); envoyer({ type: 'discussion' }); });
   rechDisc.addEventListener('input', rendreDiscussions);

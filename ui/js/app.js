@@ -12,6 +12,7 @@
   app.interface = new BT.Interface(app);
   app.vocal = new BT.VueVocal(app);
   app.agents = new BT.Agents(app);
+  app.limite = BT.Limite ? new BT.Limite(app) : null;
   // Mode vocal : les mots d'Eliot apparaissent en direct pendant qu'il parle (bt.vocalDirect).
   app.vocalDirect = BT.VocalDirect ? new BT.VocalDirect(app) : null;
   // La mascotte vit dans la marge de gauche, hors du fil : une seule pour toute la session.
@@ -73,7 +74,9 @@
       });
       if (BT.CONSIGNE_VOCALE) texte = texte.replace('\n\n' + BT.CONSIGNE_VOCALE, '');
       if (!texte.trim() && !images.length) return false;
-      var src = d.source === 'mac' ? 'le Mac' : d.source === 'victus' ? 'le Victus' : (d.source || 'externe');
+      // déjà affiché (rejoué après un rechargement alors que le transcript le contient)
+      if (o.uuid && session.items.some(function (i) { return i.genre === 'eliot' && i.uuid === o.uuid; })) return true;
+      var src = d.source === 'mac' ? 'le Mac' : d.source === 'victus' ? 'le Victus' : d.source === 'limite' ? 'la reprise automatique' : (d.source || 'externe');
       var it = session._ajouter({ genre: 'eliot', texte: texte, enFile: session.travaille, source: src,
         commande: /^\/[^\s/]/.test(texte), images: images.length ? images : null });
       if (it && o.uuid) it.uuid = o.uuid;
@@ -86,6 +89,7 @@
     dictee: function (d) { if (app.interface.recevoirDictee) app.interface.recevoirDictee(d); },
     todo: function (d) { if (BT.todo) BT.todo.recevoir(d); },
     agents: function (l) { if (app.agents) app.agents.recevoir(l); },
+    limite: function (d) { session.definirLimite(d); },
     titre: function (t) { if (typeof t === 'string' && t) { session.info.projet = t; app.interface._majNom(t); } },
     vocalDirect: function (d) { if (app.vocalDirect) app.vocalDirect.recevoir(d); },
     vocalEtape: function (d) { if (BT.apercuEtape) BT.apercuEtape(d); },

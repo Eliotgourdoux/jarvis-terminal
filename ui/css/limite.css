@@ -1,0 +1,19 @@
+/* File « limite » : bande au-dessus de la saisie quand la limite d'usage est atteinte (js/limite.js). */
+.saisie-limite {
+  display: flex; align-items: center; gap: 10px; margin: -2px 0 8px; padding: 7px 8px 7px 12px;
+  border-radius: 7px; background: var(--surface-3); border-left: 3px solid #C9A45C;
+  font: 12.5px/1.4 var(--police); color: var(--dim);
+}
+.saisie-limite[hidden] { display: none; }
+.saisie-limite b { color: #E3C887; font-weight: 600; }
+.saisie-limite-texte { flex: 1; min-width: 0; }
+.saisie-limite button {
+  flex: none; height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--bord);
+  background: var(--surface-2); color: var(--texte); font: 500 12.5px var(--police); cursor: pointer;
+}
+.saisie-limite button[hidden] { display: none; }
+.saisie-limite button:hover { background: var(--surface); }
+.saisie-limite button:focus-visible { outline: 2px solid #C9A45C; outline-offset: 1px; }
+/* Bulle d'Eliot gardée jusqu'à la reprise : filet or pointillé, texte un peu en retrait. */
+.bulle-retenue .bulle { opacity: .8; outline: 1px dashed rgba(201,164,92,.7); outline-offset: 3px; }
+.bulle-retenue .bulle-meta { color: #E3C887; }

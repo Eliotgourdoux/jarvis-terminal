@@ -274,3 +274,18 @@ html.app-ultron #discussion { display: none; }
 .discussion-extrait { display: block; margin-top: 2px; font-size: 11.5px; color: var(--dim); line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .discussion-extrait mark { background: rgba(201,164,92,.28); color: var(--texte-fort); border-radius: 2px; }
+
+/* « Quitter » : arrêter les claude ou les laisser en fond (pied de la barre). Même grammaire que CPU / RAM :
+   libellé or en petites capitales à gauche, choix à deux cases à droite, la case choisie pleine en or. */
+.pied.fond { display: flex; flex-direction: column; align-items: stretch; gap: 7px; padding: 10px 16px 11px; }
+.fond-nom { color: var(--or); font-weight: 600; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.fond-choix { display: flex; border: 1px solid rgba(201,164,92,.45); border-radius: 6px; overflow: hidden; }
+.fond-choix button { flex: 1 1 0; min-width: 0; border: 0; margin: 0; padding: 5px 4px; background: transparent; color: var(--dim);
+  font: 500 11px/1.2 var(--police, inherit); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; transition: background .12s ease-out, color .12s ease-out; }
+.fond-choix button + button { border-left: 1px solid rgba(201,164,92,.45); }
+.fond-choix button:hover { color: #EFE9DD; }
+.fond-choix button[aria-checked="true"] { background: #C9A45C; color: #14120E; font-weight: 600; }
+.fond-choix button:focus-visible { outline: 2px solid #E3C887; outline-offset: -2px; }
+.fond + .systeme { border-top-color: var(--bord); }
+@media (prefers-reduced-motion: reduce) { .fond-choix button { transition: none; } }
