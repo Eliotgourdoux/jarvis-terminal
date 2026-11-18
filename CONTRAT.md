@@ -139,3 +139,29 @@ Panneau `ui/jarvis.html` : **diagnostic seulement** (08/11/2026). Il ne s'ouvre 
 - Panneau → Swift : `window.webkit.messageHandlers.bt.postMessage({type: "passer"|"rejouer"|"couper"|"modeVocal", actif?})`.
 
 Tests du mode vocal : au plus une phrase audible pendant tout le test, le reste en sortie muette ; la transcription se teste avec des fichiers audio préparés. L'autorisation micro de macOS demandera un clic à Eliot : ne la déclenche pas en boucle.
+
+## File « limite » (18/11/2026)
+
+Quand Claude refuse un tour parce que la limite d'usage de l'abonnement est atteinte, la coque (`app/Sources/LimiteUsage.swift`) retient ce qui doit partir à la reprise :
+
+- la session refusée est « coupée » : à son heure de reprise (`resetsAt` + 20 s), la coque lui écrit « Reprends » ;
+- les messages d'Eliot écrits en attendant (`versClaude` de type `user`, ou envoi direct de la coque) ne vont pas sur stdin : ils sont gardés, puis écrits dans l'ordre à la reprise, après le « Reprends » ;
+- limite de tout l'abonnement (`five_hour`, `seven_day`, type absent) : toutes les sessions retiennent jusqu'à sa fin ; limite d'un seul modèle (`seven_day_opus`…) : seules les sessions refusées retiennent, chacune jusqu'à sa propre heure, et changer de modèle lève la coupure ;
+- un message refusé reste dans la conversation de Claude : il n'est jamais réécrit, « Reprends » demande d'y répondre.
+
+Ce que Session lit dans les lignes de Claude (`suivreLimite`) :
+
+- refus confirmé : ligne `assistant` du fil principal avec `api_error: "usage_limit_reached"` (relevé dans `api_error_params.rate_limit_info`, champs lus dans le binaire 2.1.325), ou `rate_limit_event` « rejected » (sans `isUsingOverage`) suivi d'un message fabriqué (`model: "<synthetic>"`) ou d'un `result` en erreur ;
+- une vraie réponse du fil principal annule la coupure de sa session (le refus venait d'un sous-agent) ; si sa requête est partie après le dernier refus, la limite de l'abonnement est levée avant l'heure et tout part ;
+- refusée juste après une reprise : nouvel essai dans 5, 15 puis 60 min, puis plus de « Reprends » automatique.
+
+Autres règles : rien ne part dans les 12 s qui suivent le lancement de l'app, ni dans une session dont la page n'a pas encore reçu son historique ; une session fermée par Eliot perd sa reprise automatique, mais ses messages préparés la rouvrent à la reprise ; si claude est arrêté dans la session (Terminal, session terminée), les messages ne partent pas et la page le dit. L'état est dans `~/.config/better-terminal/limite.json` (survit à une relance). Tant que quelque chose attend, l'app n'est pas mise en sommeil et, sur secteur, le Mac ne s'endort pas tout seul ; la reprise est vérifiée toutes les 15 s et au réveil du Mac.
+
+Pont :
+
+- coque → page : `bt.limite({ reprise: ms | null, retient, coupee, auto, attente: [{ uuid, texte }], perdus?: [uuid], total })`, à chaque changement et après l'historique. La coque décide seule : la page retient un message dès que `retient` est vrai. Une bulle dont l'`uuid` est dans `attente` est marquée « partira à la reprise » ; quand elle en sort, elle vient de partir (ou, si elle est dans `perdus`, elle n'a pas pu partir).
+- page → coque : `limite { action: "envoyer" }` (ce qui attend dans cette session part tout de suite), `limite { action: "vider" }` (retire les messages et la reprise automatique de cette session).
+- le « Reprends » est montré par `bt.utilisateurAilleurs({ ligne, source: "limite" })` (dédoublonné par `uuid`).
+- barre des sessions : champ `limite: { reprise, messages } | null` par session (« Reprend à 11:00 · 2 messages »).
+
+« Hey » de 6 h : `app/hey-6h.sh` (copie exécutée : `~/.config/better-terminal/hey-6h.sh`), lancé par launchd (`~/Library/LaunchAgents/local.eliot.betterterminal.hey.plist`) à 6 h ou au réveil du Mac, une fois par jour. Il envoie « Hey » à Haiku, sans hooks ni transcript, pour que la fenêtre de 5 h commence à 6 h. Journal : `~/Library/Logs/Better Terminal/hey.log`.
